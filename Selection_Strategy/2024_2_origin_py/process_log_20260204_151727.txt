@@ -1,0 +1,429 @@
+[2026-02-04 15:17:27] 开始处理，输入目录: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin
+[2026-02-04 15:17:27] 输出目录: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py
+[2026-02-04 15:17:27] 日志文件: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/process_log_20260204_151727.txt
+[2026-02-04 15:17:27] 找到 101 个文件需要处理
+
+[2026-02-04 15:17:27] 
+[1/101] 处理文件: 1.一颗耀眼的星—【回顾2】小市值成长股策略更新—改.txt
+[2026-02-04 15:18:57]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/1.一颗耀眼的星—【回顾2】小市值成长股策略更新—改.py
+[2026-02-04 15:18:57] 进度: 1/101 (成功: 1, 失败: 0)
+[2026-02-04 15:18:57] 
+[2/101] 处理文件: 10.龙头首阴战法改版二.txt
+[2026-02-04 15:20:15]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/10.龙头首阴战法改版二.py
+[2026-02-04 15:20:15] 进度: 2/101 (成功: 2, 失败: 0)
+[2026-02-04 15:20:15] 
+[3/101] 处理文件: 100.【复现】金股组合增强—分析师推荐概率.txt
+[2026-02-04 15:21:20]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/100.【复现】金股组合增强—分析师推荐概率.py
+[2026-02-04 15:21:20] 进度: 3/101 (成功: 3, 失败: 0)
+[2026-02-04 15:21:20] 
+[4/101] 处理文件: 11.缠论交易策略.txt
+[2026-02-04 15:25:58]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/11.缠论交易策略.py
+[2026-02-04 15:25:58] 进度: 4/101 (成功: 4, 失败: 0)
+[2026-02-04 15:25:58] 
+[5/101] 处理文件: 12.全市场选股？7年5倍不择时，回撤30%左右.txt
+[2026-02-04 15:27:16]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/12.全市场选股？7年5倍不择时，回撤30%左右.py
+[2026-02-04 15:27:16] 进度: 5/101 (成功: 5, 失败: 0)
+[2026-02-04 15:27:16] 
+[6/101] 处理文件: 13.【涨停研究三】连板股票收益统计与回测.txt
+[2026-02-04 15:27:41]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/13.【涨停研究三】连板股票收益统计与回测.py
+[2026-02-04 15:27:41] 进度: 6/101 (成功: 6, 失败: 0)
+[2026-02-04 15:27:41] 
+[7/101] 处理文件: 14.为实盘做的更新：分钟级别和盘中止损.txt
+[2026-02-04 15:29:05]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/14.为实盘做的更新：分钟级别和盘中止损.py
+[2026-02-04 15:29:05] 进度: 7/101 (成功: 7, 失败: 0)
+[2026-02-04 15:29:05] 
+[8/101] 处理文件: 15.高股息低杠杆小市值轮动策略.txt
+[2026-02-04 15:30:09]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/15.高股息低杠杆小市值轮动策略.py
+[2026-02-04 15:30:09] 进度: 8/101 (成功: 8, 失败: 0)
+[2026-02-04 15:30:09] 
+[9/101] 处理文件: 16.ETF轮动策略升级-多类别-低回撤.txt
+[2026-02-04 15:31:20]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/16.ETF轮动策略升级-多类别-低回撤.py
+[2026-02-04 15:31:20] 进度: 9/101 (成功: 9, 失败: 0)
+[2026-02-04 15:31:20] 
+[10/101] 处理文件: 17.科技与狠活.txt
+[2026-02-04 15:32:43]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/17.科技与狠活.py
+[2026-02-04 15:32:43] 进度: 10/101 (成功: 10, 失败: 0)
+[2026-02-04 15:32:43] 
+[11/101] 处理文件: 18.动量ETF轮动-RSRS择时-卡尔曼滤波.txt
+[2026-02-04 15:33:38]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/18.动量ETF轮动-RSRS择时-卡尔曼滤波.py
+[2026-02-04 15:33:38] 进度: 11/101 (成功: 11, 失败: 0)
+[2026-02-04 15:33:38] 
+[12/101] 处理文件: 19.【复现】高频价量相关性，意想不到的选股因子.txt
+[2026-02-04 15:34:04]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/19.【复现】高频价量相关性，意想不到的选股因子.py
+[2026-02-04 15:34:04] 进度: 12/101 (成功: 12, 失败: 0)
+[2026-02-04 15:34:04] 
+[13/101] 处理文件: 2.ETF动量轮动RSRS择时-魔改3小优化.txt
+[2026-02-04 15:34:57]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/2.ETF动量轮动RSRS择时-魔改3小优化.py
+[2026-02-04 15:34:57] 进度: 13/101 (成功: 13, 失败: 0)
+[2026-02-04 15:34:57] 
+[14/101] 处理文件: 20.【复现】因子择时？？？.txt
+[2026-02-04 15:36:08]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/20.【复现】因子择时？？？.py
+[2026-02-04 15:36:08] 进度: 14/101 (成功: 14, 失败: 0)
+[2026-02-04 15:36:08] 
+[15/101] 处理文件: 21.行业ETF轮动+择时，15年至今年化收益35%，回撤16%.txt
+[2026-02-04 15:37:32]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/21.行业ETF轮动+择时，15年至今年化收益35%，回撤16%.py
+[2026-02-04 15:37:32] 进度: 15/101 (成功: 15, 失败: 0)
+[2026-02-04 15:37:32] 
+[16/101] 处理文件: 22.菜场大妈选股法.txt
+[2026-02-04 15:39:11]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/22.菜场大妈选股法.py
+[2026-02-04 15:39:11] 进度: 16/101 (成功: 16, 失败: 0)
+[2026-02-04 15:39:11] 
+[17/101] 处理文件: 23.低价小盘简单有效.txt
+[2026-02-04 15:39:38]   ✗ 处理失败: API响应内容为空或格式无效. 响应: {"error":{"message":"模型提供方限流","type":"BACKEND_ERROR","param":"","code":400},"request_id":"0b5223e017701907752934410e0976"}
+[2026-02-04 15:39:38]   文件路径: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin/23.低价小盘简单有效.txt
+[2026-02-04 15:39:38] 进度: 17/101 (成功: 16, 失败: 1)
+[2026-02-04 15:39:38] 
+[18/101] 处理文件: 24.宽基ETF动量轮动钝化RSRS择时-回撤小.txt
+[2026-02-04 15:40:33]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/24.宽基ETF动量轮动钝化RSRS择时-回撤小.py
+[2026-02-04 15:40:33] 进度: 18/101 (成功: 17, 失败: 1)
+[2026-02-04 15:40:33] 
+[19/101] 处理文件: 25.年初至今4倍，极致的Day Trading，56.8%胜率.txt
+[2026-02-04 15:43:43]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/25.年初至今4倍，极致的Day Trading，56.8%胜率.py
+[2026-02-04 15:43:43] 进度: 19/101 (成功: 18, 失败: 1)
+[2026-02-04 15:43:43] 
+[20/101] 处理文件: 26.近几年一直有效的股票BOLL择时策略.txt
+[2026-02-04 15:44:53]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/26.近几年一直有效的股票BOLL择时策略.py
+[2026-02-04 15:44:53] 进度: 20/101 (成功: 19, 失败: 1)
+[2026-02-04 15:44:53] 
+[21/101] 处理文件: 27.中证500指增+CTA，胜率52%盈亏比1.9。不输顶尖私募.txt
+[2026-02-04 15:46:21]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/27.中证500指增+CTA，胜率52%盈亏比1.9。不输顶尖私募.py
+[2026-02-04 15:46:21] 进度: 21/101 (成功: 20, 失败: 1)
+[2026-02-04 15:46:21] 
+[22/101] 处理文件: 28.【回顾2】小市值成长股策略更新FROEC-PB-CAP-HL.txt
+[2026-02-04 15:47:40]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/28.【回顾2】小市值成长股策略更新FROEC-PB-CAP-HL.py
+[2026-02-04 15:47:40] 进度: 22/101 (成功: 21, 失败: 1)
+[2026-02-04 15:47:40] 
+[23/101] 处理文件: 28.【回顾2】小市值成长股策略更新SG-MS-PEG-HL.txt
+[2026-02-04 15:48:35]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/28.【回顾2】小市值成长股策略更新SG-MS-PEG-HL.py
+[2026-02-04 15:48:35] 进度: 23/101 (成功: 22, 失败: 1)
+[2026-02-04 15:48:35] 
+[24/101] 处理文件: 29.【策略.行业轮动】趋势-拥挤-景气度模型看行业轮动.txt
+[2026-02-04 15:50:08]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/29.【策略.行业轮动】趋势-拥挤-景气度模型看行业轮动.py
+[2026-02-04 15:50:08] 进度: 24/101 (成功: 23, 失败: 1)
+[2026-02-04 15:50:08] 
+[25/101] 处理文件: 3.截止到21年12月依然有效的小市值适配因子.txt
+[2026-02-04 15:51:13]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/3.截止到21年12月依然有效的小市值适配因子.py
+[2026-02-04 15:51:13] 进度: 25/101 (成功: 24, 失败: 1)
+[2026-02-04 15:51:13] 
+[26/101] 处理文件: 30.【超跌反弹v1.0】3年2.3倍的超跌反弹小牛股.txt
+[2026-02-04 15:52:28]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/30.【超跌反弹v1.0】3年2.3倍的超跌反弹小牛股.py
+[2026-02-04 15:52:28] 进度: 26/101 (成功: 25, 失败: 1)
+[2026-02-04 15:52:28] 
+[27/101] 处理文件: 31.《趋势永存》持续16年跑赢大盘的真正靠谱策略.txt
+[2026-02-04 15:54:28]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/31.《趋势永存》持续16年跑赢大盘的真正靠谱策略.py
+[2026-02-04 15:54:28] 进度: 27/101 (成功: 26, 失败: 1)
+[2026-02-04 15:54:28] 
+[28/101] 处理文件: 32.追高概率涨停策略, 2022年化350%.txt
+[2026-02-04 15:55:52]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/32.追高概率涨停策略, 2022年化350%.py
+[2026-02-04 15:55:52] 进度: 28/101 (成功: 27, 失败: 1)
+[2026-02-04 15:55:52] 
+[29/101] 处理文件: 33.胜率88.9%之君正集团策略-大阳分歧反包.txt
+[2026-02-04 15:57:08]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/33.胜率88.9%之君正集团策略-大阳分歧反包.py
+[2026-02-04 15:57:08] 进度: 29/101 (成功: 28, 失败: 1)
+[2026-02-04 15:57:08] 
+[30/101] 处理文件: 34.【回撤二波2.0】透过一次过拟合的机器学习摸底策略的收益上限.txt
+[2026-02-04 15:58:19]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/34.【回撤二波2.0】透过一次过拟合的机器学习摸底策略的收益上限.py
+[2026-02-04 15:58:19] 进度: 30/101 (成功: 29, 失败: 1)
+[2026-02-04 15:58:19] 
+[31/101] 处理文件: 35.自适应量化终极算法2.0 （全新升级).txt
+[2026-02-04 15:59:27]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/35.自适应量化终极算法2.0 （全新升级).py
+[2026-02-04 15:59:27] 进度: 31/101 (成功: 30, 失败: 1)
+[2026-02-04 15:59:27] 
+[32/101] 处理文件: 36.致敬市场(6) ，指数期货贴水.txt
+[2026-02-04 15:59:53]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/36.致敬市场(6) ，指数期货贴水.py
+[2026-02-04 15:59:53] 进度: 32/101 (成功: 31, 失败: 1)
+[2026-02-04 15:59:53] 
+[33/101] 处理文件: 37.三阳三阴战法.txt
+[2026-02-04 16:01:11]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/37.三阳三阴战法.py
+[2026-02-04 16:01:11] 进度: 33/101 (成功: 32, 失败: 1)
+[2026-02-04 16:01:11] 
+[34/101] 处理文件: 38.ETF动量轮动RSRS择时-魔改3-北向资金择时-再优化.txt
+[2026-02-04 16:02:31]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/38.ETF动量轮动RSRS择时-魔改3-北向资金择时-再优化.py
+[2026-02-04 16:02:31] 进度: 34/101 (成功: 33, 失败: 1)
+[2026-02-04 16:02:31] 
+[35/101] 处理文件: 39.绩优小市值量化君也-模拟交易年化333.75%.txt
+[2026-02-04 16:03:27]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/39.绩优小市值量化君也-模拟交易年化333.75%.py
+[2026-02-04 16:03:27] 进度: 35/101 (成功: 34, 失败: 1)
+[2026-02-04 16:03:27] 
+[36/101] 处理文件: 4.集合竞价摸奖策略1.0-致敬2022.txt
+[2026-02-04 16:04:49]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/4.集合竞价摸奖策略1.0-致敬2022.py
+[2026-02-04 16:04:49] 进度: 36/101 (成功: 35, 失败: 1)
+[2026-02-04 16:04:49] 
+[37/101] 处理文件: 40.RSI学习贴.txt
+[2026-02-04 16:05:58]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/40.RSI学习贴.py
+[2026-02-04 16:05:58] 进度: 37/101 (成功: 36, 失败: 1)
+[2026-02-04 16:05:58] 
+[38/101] 处理文件: 41.手把手教你“机器学习-动态多因子选股”(附保姆级教程).txt
+[2026-02-04 16:07:26]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/41.手把手教你“机器学习-动态多因子选股”(附保姆级教程).py
+[2026-02-04 16:07:26] 进度: 38/101 (成功: 37, 失败: 1)
+[2026-02-04 16:07:26] 
+[39/101] 处理文件: 42.实盘出现的问题和解决办法.txt
+[2026-02-04 16:08:30]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/42.实盘出现的问题和解决办法.py
+[2026-02-04 16:08:30] 进度: 39/101 (成功: 38, 失败: 1)
+[2026-02-04 16:08:30] 
+[40/101] 处理文件: 43.ETF动量因子评估.txt
+[2026-02-04 16:09:51]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/43.ETF动量因子评估.py
+[2026-02-04 16:09:51] 进度: 40/101 (成功: 39, 失败: 1)
+[2026-02-04 16:09:51] 
+[41/101] 处理文件: 44.！！！最易上手的网格策略v2.0，设置几个参数就可以直接使用.txt
+[2026-02-04 16:14:35]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/44.！！！最易上手的网格策略v2.0，设置几个参数就可以直接使用.py
+[2026-02-04 16:14:35] 进度: 41/101 (成功: 40, 失败: 1)
+[2026-02-04 16:14:35] 
+[42/101] 处理文件: 45.真真正正的诚意之作-2021超十倍.txt
+[2026-02-04 16:15:47]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/45.真真正正的诚意之作-2021超十倍.py
+[2026-02-04 16:15:47] 进度: 42/101 (成功: 41, 失败: 1)
+[2026-02-04 16:15:47] 
+[43/101] 处理文件: 46.韶华研究之十二--还算可以的竞价研究.txt
+[2026-02-04 16:17:28]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/46.韶华研究之十二--还算可以的竞价研究.py
+[2026-02-04 16:17:28] 进度: 43/101 (成功: 42, 失败: 1)
+[2026-02-04 16:17:28] 
+[44/101] 处理文件: 47.别人恐惧我贪婪——重视大盘择时.txt
+[2026-02-04 16:18:46]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/47.别人恐惧我贪婪——重视大盘择时.py
+[2026-02-04 16:18:46] 进度: 44/101 (成功: 43, 失败: 1)
+[2026-02-04 16:18:46] 
+[45/101] 处理文件: 48.一种宏观数据的中长线策略，年化15%，最大回撤9%.txt
+[2026-02-04 16:20:09]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/48.一种宏观数据的中长线策略，年化15%，最大回撤9%.py
+[2026-02-04 16:20:09] 进度: 45/101 (成功: 44, 失败: 1)
+[2026-02-04 16:20:09] 
+[46/101] 处理文件: 49.修改成一创版本.txt
+[2026-02-04 16:21:38]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/49.修改成一创版本.py
+[2026-02-04 16:21:38] 进度: 46/101 (成功: 45, 失败: 1)
+[2026-02-04 16:21:38] 
+[47/101] 处理文件: 5.随机森林策略，低换手率，年化近50%.txt
+[2026-02-04 16:22:24]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/5.随机森林策略，低换手率，年化近50%.py
+[2026-02-04 16:22:24] 进度: 47/101 (成功: 46, 失败: 1)
+[2026-02-04 16:22:24] 
+[48/101] 处理文件: 50.ETF动量轮动RSRS择时-V2.1.txt
+[2026-02-04 16:23:21]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/50.ETF动量轮动RSRS择时-V2.1.py
+[2026-02-04 16:23:21] 进度: 48/101 (成功: 47, 失败: 1)
+[2026-02-04 16:23:21] 
+[49/101] 处理文件: 51.行业反转效应（年化32%回撤8%).txt
+[2026-02-04 16:25:00]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/51.行业反转效应（年化32%回撤8%).py
+[2026-02-04 16:25:00] 进度: 49/101 (成功: 48, 失败: 1)
+[2026-02-04 16:25:00] 
+[50/101] 处理文件: 52.市场宽度——简洁版.txt
+[2026-02-04 16:27:03]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/52.市场宽度——简洁版.py
+[2026-02-04 16:27:03] 进度: 50/101 (成功: 49, 失败: 1)
+[2026-02-04 16:27:03] 
+[51/101] 处理文件: 53.超跌网格交易大法V1.2：稳健跑赢大盘-年化13%回撤7%.txt
+[2026-02-04 16:32:12]   ✗ 处理失败: API响应内容为空或格式无效. 响应: {"choices":[{"message":{"role":"assistant"},"index":0,"finish_reason":"MAX_TOKENS"}],"usage":{"cacheReadInputTokensCompatible":0,"completion_tokens":0,"prompt_tokens":13945,"total_tokens":22134,"completion_tokens_details":{"reasoning_tokens":8189},"prompt_tokens_details":{"text_tokens":13945}},"id":"chat","created":1770193932982,"object":"chat.completion.chunk"}
+[2026-02-04 16:32:12]   文件路径: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin/53.超跌网格交易大法V1.2：稳健跑赢大盘-年化13%回撤7%.txt
+[2026-02-04 16:32:12] 进度: 51/101 (成功: 49, 失败: 2)
+[2026-02-04 16:32:12] 
+[52/101] 处理文件: 54.sales_growth今年最优版.txt
+[2026-02-04 16:33:16]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/54.sales_growth今年最优版.py
+[2026-02-04 16:33:16] 进度: 52/101 (成功: 50, 失败: 2)
+[2026-02-04 16:33:16] 
+[53/101] 处理文件: 55.【复现】技术指标形态识别.txt
+[2026-02-04 16:35:09]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/55.【复现】技术指标形态识别.py
+[2026-02-04 16:35:09] 进度: 53/101 (成功: 51, 失败: 2)
+[2026-02-04 16:35:09] 
+[54/101] 处理文件: 56.一创PEG+EBIT+turnover_volatility.txt
+[2026-02-04 16:35:56]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/56.一创PEG+EBIT+turnover_volatility.py
+[2026-02-04 16:35:56] 进度: 54/101 (成功: 52, 失败: 2)
+[2026-02-04 16:35:56] 
+[55/101] 处理文件: 57.别人恐惧我贪婪3——年化20%的股债组合.txt
+[2026-02-04 16:36:52]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/57.别人恐惧我贪婪3——年化20%的股债组合.py
+[2026-02-04 16:36:52] 进度: 55/101 (成功: 53, 失败: 2)
+[2026-02-04 16:36:52] 
+[56/101] 处理文件: 58.ETF动量轮动RSRS与北上择时-股债平衡-盘中止损.txt
+[2026-02-04 16:38:08]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/58.ETF动量轮动RSRS与北上择时-股债平衡-盘中止损.py
+[2026-02-04 16:38:08] 进度: 56/101 (成功: 54, 失败: 2)
+[2026-02-04 16:38:08] 
+[57/101] 处理文件: 59.年化62%的动量策略.txt
+[2026-02-04 16:39:16]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/59.年化62%的动量策略.py
+[2026-02-04 16:39:16] 进度: 57/101 (成功: 55, 失败: 2)
+[2026-02-04 16:39:16] 
+[58/101] 处理文件: 6.PEG+成长+小市值+RSRS择时.txt
+[2026-02-04 16:40:22]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/6.PEG+成长+小市值+RSRS择时.py
+[2026-02-04 16:40:22] 进度: 58/101 (成功: 56, 失败: 2)
+[2026-02-04 16:40:22] 
+[59/101] 处理文件: 60.ETF动量轮动RSRS择时-v2.txt
+[2026-02-04 16:40:36]   ✗ 处理失败: API响应内容为空或格式无效. 响应: {"error":{"message":"每分钟消耗token数超过当前AK-1Zx8EvYhC8FsyQXLqwKgXVRD申请TPM值:100000","type":"GATEWAY_ERROR","param":"","code":10429},"request_id":"213c682017701944367966338e0ae7"}
+[2026-02-04 16:40:36]   文件路径: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin/60.ETF动量轮动RSRS择时-v2.txt
+[2026-02-04 16:40:36] 进度: 59/101 (成功: 56, 失败: 3)
+[2026-02-04 16:40:36] 
+[60/101] 处理文件: 61.简单ETF策略，年化97%.txt
+[2026-02-04 16:40:51]   ✗ 处理失败: API响应内容为空或格式无效. 响应: {"error":{"message":"每分钟消耗token数超过当前AK-1Zx8EvYhC8FsyQXLqwKgXVRD申请TPM值:100000","type":"GATEWAY_ERROR","param":"","code":10429},"request_id":"212bfcd217701944512162145e0c2d"}
+[2026-02-04 16:40:51]   文件路径: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin/61.简单ETF策略，年化97%.txt
+[2026-02-04 16:40:51] 进度: 60/101 (成功: 56, 失败: 4)
+[2026-02-04 16:40:51] 
+[61/101] 处理文件: 62.【重构】C-VIX 中国版 VIX 编制手册.txt
+[2026-02-04 16:42:13]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/62.【重构】C-VIX 中国版 VIX 编制手册.py
+[2026-02-04 16:42:13] 进度: 61/101 (成功: 57, 失败: 4)
+[2026-02-04 16:42:13] 
+[62/101] 处理文件: 63.生猪期货CTA策略.txt
+[2026-02-04 16:46:28]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/63.生猪期货CTA策略.py
+[2026-02-04 16:46:28] 进度: 62/101 (成功: 58, 失败: 4)
+[2026-02-04 16:46:28] 
+[63/101] 处理文件: 64.ETF轮动策略升级-增加盘中止损.txt
+[2026-02-04 16:47:40]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/64.ETF轮动策略升级-增加盘中止损.py
+[2026-02-04 16:47:40] 进度: 63/101 (成功: 59, 失败: 4)
+[2026-02-04 16:47:40] 
+[64/101] 处理文件: 65.神级策略：桥水全天候策略-7年最大回撤仅3.5%.txt
+[2026-02-04 16:49:01]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/65.神级策略：桥水全天候策略-7年最大回撤仅3.5%.py
+[2026-02-04 16:49:01] 进度: 64/101 (成功: 60, 失败: 4)
+[2026-02-04 16:49:01] 
+[65/101] 处理文件: 66.ETF动量轮动MA乖离择时.txt
+[2026-02-04 16:50:49]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/66.ETF动量轮动MA乖离择时.py
+[2026-02-04 16:50:49] 进度: 65/101 (成功: 61, 失败: 4)
+[2026-02-04 16:50:49] 
+[66/101] 处理文件: 67.三因子策略年化21%简单多因子策略框架.txt
+[2026-02-04 16:51:33]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/67.三因子策略年化21%简单多因子策略框架.py
+[2026-02-04 16:51:33] 进度: 66/101 (成功: 62, 失败: 4)
+[2026-02-04 16:51:33] 
+[67/101] 处理文件: 68.胜率78%，6年36倍，今年行情依然50%年化.txt
+[2026-02-04 16:52:52]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/68.胜率78%，6年36倍，今年行情依然50%年化.py
+[2026-02-04 16:52:52] 进度: 67/101 (成功: 63, 失败: 4)
+[2026-02-04 16:52:52] 
+[68/101] 处理文件: 69.场内基金定投价值平均增强策略，年化30%+.txt
+[2026-02-04 16:56:57]   ✗ 处理失败: API响应内容为空或格式无效. 响应: {"choices":[{"message":{"role":"assistant"},"index":0,"finish_reason":"MAX_TOKENS"}],"usage":{"cacheReadInputTokensCompatible":0,"completion_tokens":0,"prompt_tokens":6480,"total_tokens":14669,"completion_tokens_details":{"reasoning_tokens":8189},"prompt_tokens_details":{"text_tokens":6480}},"id":"chat","created":1770195417881,"object":"chat.completion.chunk"}
+[2026-02-04 16:56:57]   文件路径: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin/69.场内基金定投价值平均增强策略，年化30%+.txt
+[2026-02-04 16:56:57] 进度: 68/101 (成功: 63, 失败: 5)
+[2026-02-04 16:56:57] 
+[69/101] 处理文件: 7.致敬经典作品——小兵哥《一致性风险度量》——极速版.txt
+[2026-02-04 16:58:13]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/7.致敬经典作品——小兵哥《一致性风险度量》——极速版.py
+[2026-02-04 16:58:13] 进度: 69/101 (成功: 64, 失败: 5)
+[2026-02-04 16:58:13] 
+[70/101] 处理文件: 70.（股票交易模板）小市值-EPS-成长因子选股.txt
+[2026-02-04 17:01:48]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/70.（股票交易模板）小市值-EPS-成长因子选股.py
+[2026-02-04 17:01:48] 进度: 70/101 (成功: 65, 失败: 5)
+[2026-02-04 17:01:48] 
+[71/101] 处理文件: 71.期货日内策略三价均线结合ATR指标.txt
+[2026-02-04 17:02:53]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/71.期货日内策略三价均线结合ATR指标.py
+[2026-02-04 17:02:53] 进度: 71/101 (成功: 66, 失败: 5)
+[2026-02-04 17:02:53] 
+[72/101] 处理文件: 72.随机森林 - 多因子模型.txt
+[2026-02-04 17:04:14]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/72.随机森林 - 多因子模型.py
+[2026-02-04 17:04:14] 进度: 72/101 (成功: 67, 失败: 5)
+[2026-02-04 17:04:14] 
+[73/101] 处理文件: 73.实现净利润跳空策略.txt
+[2026-02-04 17:05:11]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/73.实现净利润跳空策略.py
+[2026-02-04 17:05:11] 进度: 73/101 (成功: 68, 失败: 5)
+[2026-02-04 17:05:11] 
+[74/101] 处理文件: 74.【动量应用V1】12年120倍，根据研报思路调整.txt
+[2026-02-04 17:05:39]   ✗ 处理失败: API响应内容为空或格式无效. 响应: {"error":{"message":"模型提供方限流","type":"BACKEND_ERROR","param":"","code":400},"request_id":"2103e3db17701959307467692e0995"}
+[2026-02-04 17:05:39]   文件路径: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin/74.【动量应用V1】12年120倍，根据研报思路调整.txt
+[2026-02-04 17:05:39] 进度: 74/101 (成功: 68, 失败: 6)
+[2026-02-04 17:05:39] 
+[75/101] 处理文件: 75.ETF轮动策略-入门2.0.txt
+[2026-02-04 17:07:03]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/75.ETF轮动策略-入门2.0.py
+[2026-02-04 17:07:03] 进度: 75/101 (成功: 69, 失败: 6)
+[2026-02-04 17:07:03] 
+[76/101] 处理文件: 76.ETF-控制回撤性能拉满（国债ETF增强).txt
+[2026-02-04 17:08:04]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/76.ETF-控制回撤性能拉满（国债ETF增强).py
+[2026-02-04 17:08:04] 进度: 76/101 (成功: 70, 失败: 6)
+[2026-02-04 17:08:04] 
+[77/101] 处理文件: 77.龙头弱转强战法.txt
+[2026-02-04 17:09:20]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/77.龙头弱转强战法.py
+[2026-02-04 17:09:20] 进度: 77/101 (成功: 71, 失败: 6)
+[2026-02-04 17:09:20] 
+[78/101] 处理文件: 78.ffscore选股加rsrs择时.txt
+[2026-02-04 17:10:37]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/78.ffscore选股加rsrs择时.py
+[2026-02-04 17:10:37] 进度: 78/101 (成功: 72, 失败: 6)
+[2026-02-04 17:10:37] 
+[79/101] 处理文件: 79.实盘一周50%的妖股探测器.txt
+[2026-02-04 17:11:50]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/79.实盘一周50%的妖股探测器.py
+[2026-02-04 17:11:50] 进度: 79/101 (成功: 73, 失败: 6)
+[2026-02-04 17:11:50] 
+[80/101] 处理文件: 8.14个月200%，超短线实盘交易策略！无未来函数.txt
+[2026-02-04 17:12:34]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/8.14个月200%，超短线实盘交易策略！无未来函数.py
+[2026-02-04 17:12:34] 进度: 80/101 (成功: 74, 失败: 6)
+[2026-02-04 17:12:34] 
+[81/101] 处理文件: 80.短线策略-2022年两个半月收益45%-无未来函数.txt
+[2026-02-04 17:14:05]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/80.短线策略-2022年两个半月收益45%-无未来函数.py
+[2026-02-04 17:14:05] 进度: 81/101 (成功: 75, 失败: 6)
+[2026-02-04 17:14:05] 
+[82/101] 处理文件: 81.低PB小市值低换手策略总结.txt
+[2026-02-04 17:15:00]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/81.低PB小市值低换手策略总结.py
+[2026-02-04 17:15:00] 进度: 82/101 (成功: 76, 失败: 6)
+[2026-02-04 17:15:00] 
+[83/101] 处理文件: 82.可转债知识总结.txt
+[2026-02-04 17:16:31]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/82.可转债知识总结.py
+[2026-02-04 17:16:31] 进度: 83/101 (成功: 77, 失败: 6)
+[2026-02-04 17:16:31] 
+[84/101] 处理文件: 83.开盘幅度决定日内方向.txt
+[2026-02-04 17:16:58]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/83.开盘幅度决定日内方向.py
+[2026-02-04 17:16:58] 进度: 84/101 (成功: 78, 失败: 6)
+[2026-02-04 17:16:58] 
+[85/101] 处理文件: 84.多大规模的基金收益最好？偏股基金规模研究.txt
+[2026-02-04 17:17:58]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/84.多大规模的基金收益最好？偏股基金规模研究.py
+[2026-02-04 17:17:58] 进度: 85/101 (成功: 79, 失败: 6)
+[2026-02-04 17:17:58] 
+[86/101] 处理文件: 85.价值策略重开，再次向Jqz1226致敬.txt
+[2026-02-04 17:20:44]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/85.价值策略重开，再次向Jqz1226致敬.py
+[2026-02-04 17:20:44] 进度: 86/101 (成功: 80, 失败: 6)
+[2026-02-04 17:20:44] 
+[87/101] 处理文件: 86.可转债双低策略.txt
+[2026-02-04 17:22:15]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/86.可转债双低策略.py
+[2026-02-04 17:22:15] 进度: 87/101 (成功: 81, 失败: 6)
+[2026-02-04 17:22:15] 
+[88/101] 处理文件: 87.北上净买入策略.txt
+[2026-02-04 17:22:44]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/87.北上净买入策略.py
+[2026-02-04 17:22:44] 进度: 88/101 (成功: 82, 失败: 6)
+[2026-02-04 17:22:44] 
+[89/101] 处理文件: 88.打首板策略，今年收益达到40%，绝无未来函数（必回）.txt
+[2026-02-04 17:23:57]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/88.打首板策略，今年收益达到40%，绝无未来函数（必回）.py
+[2026-02-04 17:23:57] 进度: 89/101 (成功: 83, 失败: 6)
+[2026-02-04 17:23:57] 
+[90/101] 处理文件: 89.年化收益55.7%， 超高胜率 0.799.txt
+[2026-02-04 17:25:18]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/89.年化收益55.7%， 超高胜率 0.799.py
+[2026-02-04 17:25:18] 进度: 90/101 (成功: 84, 失败: 6)
+[2026-02-04 17:25:18] 
+[91/101] 处理文件: 9.分享几个截止2022年3月仍有效的策略.txt
+[2026-02-04 17:26:44]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/9.分享几个截止2022年3月仍有效的策略.py
+[2026-02-04 17:26:44] 进度: 91/101 (成功: 85, 失败: 6)
+[2026-02-04 17:26:44] 
+[92/101] 处理文件: 90.大师策略——柯林·麦克连成长价值优势投资法.txt
+[2026-02-04 17:27:57]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/90.大师策略——柯林·麦克连成长价值优势投资法.py
+[2026-02-04 17:27:57] 进度: 92/101 (成功: 86, 失败: 6)
+[2026-02-04 17:27:57] 
+[93/101] 处理文件: 91.【复现】特征分布建模择时.txt
+[2026-02-04 17:28:39]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/91.【复现】特征分布建模择时.py
+[2026-02-04 17:28:39] 进度: 93/101 (成功: 87, 失败: 6)
+[2026-02-04 17:28:39] 
+[94/101] 处理文件: 92.利用myTT库整合通达信公式——以“飞鹰优选”选股公式为例.txt
+[2026-02-04 17:29:36]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/92.利用myTT库整合通达信公式——以“飞鹰优选”选股公式为例.py
+[2026-02-04 17:29:36] 进度: 94/101 (成功: 88, 失败: 6)
+[2026-02-04 17:29:36] 
+[95/101] 处理文件: 93.因子看板多因子模型---由量化课堂多因子模型修改.txt
+[2026-02-04 17:33:32]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/93.因子看板多因子模型---由量化课堂多因子模型修改.py
+[2026-02-04 17:33:32] 进度: 95/101 (成功: 89, 失败: 6)
+[2026-02-04 17:33:32] 
+[96/101] 处理文件: 94.FoF, all in.txt
+[2026-02-04 17:34:01]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/94.FoF, all in.py
+[2026-02-04 17:34:01] 进度: 96/101 (成功: 90, 失败: 6)
+[2026-02-04 17:34:01] 
+[97/101] 处理文件: 95.首席质量因子-Gross Profitabilit（简化版）.txt
+[2026-02-04 17:35:15]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/95.首席质量因子-Gross Profitabilit（简化版）.py
+[2026-02-04 17:35:15] 进度: 97/101 (成功: 91, 失败: 6)
+[2026-02-04 17:35:15] 
+[98/101] 处理文件: 96.集合竞价量比策略V1.txt
+[2026-02-04 17:37:57]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/96.集合竞价量比策略V1.py
+[2026-02-04 17:37:57] 进度: 98/101 (成功: 92, 失败: 6)
+[2026-02-04 17:37:57] 
+[99/101] 处理文件: 97.【涨停研究一】具有哪些因子的股票更容易涨停.txt
+[2026-02-04 17:41:14]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/97.【涨停研究一】具有哪些因子的股票更容易涨停.py
+[2026-02-04 17:41:14] 进度: 99/101 (成功: 93, 失败: 6)
+[2026-02-04 17:41:14] 
+[100/101] 处理文件: 98.【漂亮50】“漂亮50”策略复现以及股息率排序函数.txt
+[2026-02-04 17:42:52]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/98.【漂亮50】“漂亮50”策略复现以及股息率排序函数.py
+[2026-02-04 17:42:52] 进度: 100/101 (成功: 94, 失败: 6)
+[2026-02-04 17:42:52] 
+[101/101] 处理文件: 99.计算每日全A市场个股创新高比例(改).txt
+[2026-02-04 17:43:30]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py/99.计算每日全A市场个股创新高比例(改).py
+[2026-02-04 17:43:30] 进度: 101/101 (成功: 95, 失败: 6)
+[2026-02-04 17:43:30] 
+============================================================
+[2026-02-04 17:43:30] 处理完成!
+[2026-02-04 17:43:30] 成功: 95 个文件
+[2026-02-04 17:43:30] 失败: 6 个文件
+[2026-02-04 17:43:30] 输出目录: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2024_2_origin_py
+[2026-02-04 17:43:30] 
+失败文件列表:
+[2026-02-04 17:43:30]   - 23.低价小盘简单有效.txt: API响应内容为空或格式无效. 响应: {"error":{"message":"模型提供方限流","type":"BACKEND_ERROR","param":"","code":400},"request_id":"0b5223e017701907752934410e0976"}
+[2026-02-04 17:43:30]   - 53.超跌网格交易大法V1.2：稳健跑赢大盘-年化13%回撤7%.txt: API响应内容为空或格式无效. 响应: {"choices":[{"message":{"role":"assistant"},"index":0,"finish_reason":"MAX_TOKENS"}],"usage":{"cacheReadInputTokensCompatible":0,"completion_tokens":0,"prompt_tokens":13945,"total_tokens":22134,"completion_tokens_details":{"reasoning_tokens":8189},"prompt_tokens_details":{"text_tokens":13945}},"id":"chat","created":1770193932982,"object":"chat.completion.chunk"}
+[2026-02-04 17:43:30]   - 60.ETF动量轮动RSRS择时-v2.txt: API响应内容为空或格式无效. 响应: {"error":{"message":"每分钟消耗token数超过当前AK-1Zx8EvYhC8FsyQXLqwKgXVRD申请TPM值:100000","type":"GATEWAY_ERROR","param":"","code":10429},"request_id":"213c682017701944367966338e0ae7"}
+[2026-02-04 17:43:30]   - 61.简单ETF策略，年化97%.txt: API响应内容为空或格式无效. 响应: {"error":{"message":"每分钟消耗token数超过当前AK-1Zx8EvYhC8FsyQXLqwKgXVRD申请TPM值:100000","type":"GATEWAY_ERROR","param":"","code":10429},"request_id":"212bfcd217701944512162145e0c2d"}
+[2026-02-04 17:43:30]   - 69.场内基金定投价值平均增强策略，年化30%+.txt: API响应内容为空或格式无效. 响应: {"choices":[{"message":{"role":"assistant"},"index":0,"finish_reason":"MAX_TOKENS"}],"usage":{"cacheReadInputTokensCompatible":0,"completion_tokens":0,"prompt_tokens":6480,"total_tokens":14669,"completion_tokens_details":{"reasoning_tokens":8189},"prompt_tokens_details":{"text_tokens":6480}},"id":"chat","created":1770195417881,"object":"chat.completion.chunk"}
+[2026-02-04 17:43:30]   - 74.【动量应用V1】12年120倍，根据研报思路调整.txt: API响应内容为空或格式无效. 响应: {"error":{"message":"模型提供方限流","type":"BACKEND_ERROR","param":"","code":400},"request_id":"2103e3db17701959307467692e0995"}
