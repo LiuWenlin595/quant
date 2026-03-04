@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 文件格式转换工具
-支持：txt转py、py转md、py转txt
+支持：txt转py、py转md、py转txt、md转py
 """
 
 import os
@@ -170,6 +170,57 @@ def convert_py_to_txt(source_dir, target_dir):
     print("="*50)
 
 
+def convert_md_to_py(source_dir, target_dir):
+    """将 md 文件转换为 py 文件（提取代码块内容，去掉 ```python / ``` 标记）"""
+    source_dir = Path(source_dir)
+    target_dir = Path(target_dir)
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    converted_count = 0
+    skipped_count = 0
+
+    for file_path in source_dir.iterdir():
+        if file_path.is_file() and file_path.suffix.lower() == '.md':
+            new_filename = file_path.stem + '.py'
+            target_file_path = target_dir / new_filename
+
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                # 若包含 markdown 代码块，去掉 ```python 或 ``` 包裹
+                stripped = content.strip()
+                if stripped.startswith('```'):
+                    lines = stripped.split('\n')
+                    # 去掉首行（```python 或 ```）
+                    if lines and lines[0].strip().startswith('```'):
+                        lines = lines[1:]
+                    # 去掉末行（```）
+                    if lines and lines[-1].strip() == '```':
+                        lines = lines[:-1]
+                    content = '\n'.join(lines)
+
+                with open(target_file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+
+                print(f"✓ 已转换: {file_path.name} -> {new_filename}")
+                converted_count += 1
+            except Exception as e:
+                print(f"✗ 转换失败: {file_path.name} - {str(e)}")
+                skipped_count += 1
+        elif file_path.is_file():
+            print(f"- 跳过非md文件: {file_path.name}")
+            skipped_count += 1
+
+    print("\n" + "="*50)
+    print("转换完成！")
+    print(f"成功转换: {converted_count} 个文件")
+    print(f"跳过: {skipped_count} 个文件")
+    print(f"目标文件夹: {target_dir}")
+    print("="*50)
+
+
 def main():
     """主函数，支持命令行参数"""
     parser = argparse.ArgumentParser(
@@ -185,28 +236,31 @@ def main():
   
   # py转txt
   python convert_txt_to_py.py --mode py2txt --source ./聚宽2025年精选py --target ./聚宽2025年精选txt
+
+  # md转py
+  python convert_file.py --mode md2py --source ./聚宽2025年精选md --target ./聚宽2025年精选py
         """
     )
-    
+
     parser.add_argument(
         '--mode',
         type=str,
-        default='py2md',
-        choices=['txt2py', 'py2md', 'py2txt'],
-        help='转换模式: txt2py(文本转Python), py2md(Python转Markdown), py2txt(Python转文本)'
+        default='md2py',
+        choices=['txt2py', 'py2md', 'py2txt', 'md2py'],
+        help='转换模式: txt2py, py2md, py2txt, md2py(Markdown转Python)'
     )
     
     parser.add_argument(
         '--source',
         type=str,
-        default='/Users/liuwenlin/Documents/Self/quant/Selection_Strategy/聚宽2025年精选py_explain',
+        default='/Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2023_origin_py',
         help='源文件夹路径'
     )
     
     parser.add_argument(
         '--target',
         type=str,
-        default='/Users/liuwenlin/Documents/Self/quant/Selection_Strategy/聚宽2025年精选py_explain',
+        default='/Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2023_origin_format',
         help='目标文件夹路径'
     )
     
@@ -228,6 +282,11 @@ def main():
         print(f"源文件夹: {args.source}")
         print(f"目标文件夹: {args.target}\n")
         convert_py_to_txt(args.source, args.target)
+    elif args.mode == 'md2py':
+        print(f"开始转换: md -> py")
+        print(f"源文件夹: {args.source}")
+        print(f"目标文件夹: {args.target}\n")
+        convert_md_to_py(args.source, args.target)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ plt.rcParams['font.sans-serif'] = ['SimHei']  # 中文字体设置-黑体
 plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
 today = str(datetime.datetime.today().date())
 print(today)
-# 获得etf基金列表
+#获得etf基金列表
 df = get_all_securities(['etf'])
 df = df.reset_index().rename(columns={'index':'code'})
 df = df[df['start_date'] < datetime.date(2021, 1, 1)]

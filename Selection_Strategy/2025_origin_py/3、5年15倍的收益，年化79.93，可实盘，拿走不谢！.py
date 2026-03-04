@@ -309,4 +309,85 @@ def filter_paused_stock(stock_list):
 # 过滤ST及其他具有退市标签的股票
 def filter_st_stock(stock_list):
 	current_data = get_current_data()
-	return [stock for
+	return [stock for stock in stock_list
+			if not current_data[stock].is_st
+			and 'ST' not in current_data[stock].name
+			and '*' not in current_data[stock].name
+			and '退' not in current_data[stock].name]
+#2-6 过滤次新股
+def filter_new_stock(context,stock_list):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=250)]
+
+
+# 过滤涨幅过大的股票
+def filter_limitup_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < current_data[stock].high_limit*0.97]
+
+# 过滤跌幅过大的股票
+def filter_limitdown_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] > current_data[stock].low_limit*1.04]
+
+#2-4 过滤股价高于10元的股票	
+def filter_highprice_stock(context,stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < 10]
+						
+def after_market_close(context):
+    log.info(str(context.current_dt))
+    
+#4-2 如果no_trading_today_signal为True，则清仓
+def close_account(context):
+    if g.no_trading_today_signal == True:
+        position_count = context.portfolio.positions
+        if len(position_count) != 0:
+            for stock in position_count:
+                position = context.portfolio.positions[stock]
+                close_position(position)
+                log.info("卖出[%s]" % (stock))
+                
+                
+                
+#3-1 交易模块-自定义下单
+def order_target_value_(security, value):
+    if value == 0:
+        log.debug("Selling out %s" % (security))
+    else:
+        log.debug("Order %s to value %f" % (security, value))
+    return order_target_value(security, value)
+
+#3-2 交易模块-开仓
+def open_position(security, value):
+    order = order_target_value_(security, value)
+    if order != None and order.filled > 0:
+        return True
+    return False
+                
+                
+#3-3 交易模块-平仓
+def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+    
+    
+#4-1 判断今天是否为账户资金再平衡的日期
+def today_is_between(context, start_date, end_date):
+    today = context.current_dt.strftime('%m-%d')
+    if (start_date <= today) and (today <= end_date):
+        return True
+    else:
+        return False
+    # end

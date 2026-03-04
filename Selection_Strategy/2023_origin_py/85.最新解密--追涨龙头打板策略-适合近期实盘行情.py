@@ -109,3 +109,183 @@ def stop_loss(context):
              last_price_dict = get_current_data()
              current_price=last_price_dict[stock].last_price 
              closeable_amount = context.portfolio.positions[stock].closeable_amount
+             cost_price = context.portfolio.positions[stock].avg_cost
+             df = get_price(stock, end_date=context.previous_date, frequency='daily', fields=['close'], skip_paused=True, fq='pre', count=1)
+             if df.empty:
+                 continue
+             pre_close_price = df['close'][0]
+             if((closeable_amount>0 and current_price<g.stop_loss_per*pre_close_price) or(closeable_amount>0 and current_price<g.stop_loss_per*cost_price)):
+                  sell_stock(stock,0)
+                  log.info(str(get_security_info(stock).display_name)+"  开盘卖出止损")
+             else:
+                 log.info(str(get_security_info(stock).display_name)+"   开盘不用止损")
+    
+    
+def buy_stock(context,stock):
+    if(stock in  context.portfolio.positions.keys()):
+           pass
+    else:
+           buy_value = context.subportfolios[0].total_value/g.max_number_stock
+           if(context.subportfolios[0].available_cash>=buy_value):
+                Order_object = order_value(stock, buy_value)
+                if(Order_object is not None):
+                    log.info( "买入股票:  "+str(get_security_info(stock).display_name) + "  买入价格：  "+str(Order_object.price)+"  买入数量: " +str(Order_object.amount)+" 成交金额: " +str(buy_value))
+                
+                else:
+                    log.info(str(get_security_info(stock).display_name)+ ' ************* 下买单失败 **************') 
+                   
+           else:
+                log.info("买入股票： "+str(get_security_info(stock).display_name)+ ' ************* 资金不足 **************')
+    
+def sell_stock(stock,stock_number):
+        order_result=order_target(stock,stock_number)
+        if(order_result is not None):
+            log.info(str(get_security_info(stock).display_name)+' ------卖出成功----')
+        else:
+            log.info(str(get_security_info(stock).display_name)+ ' --------卖出失败--------')
+
+## 开盘时运行函数
+def market_open(context):
+    #log.info('函数运行时间(market_open):'+str(context.current_dt.time()))
+    stop_loss(context)  #开盘判断是否要止损
+    #买股票
+    if(g.buy_stock_list is None):
+        return
+    if(len(g.buy_stock_list)>0):
+        code_len = len(g.buy_stock_list)
+        if(code_len>g.max_number_stock):
+            g.buy_stock_list = g.buy_stock_list[0:g.max_number_stock]
+        if(check_position_number(context)==False):
+            return
+        for stock in g.buy_stock_list:
+            if(check_position_number(context)==False):
+               return
+            buy_stock(context,stock)
+
+def stop_win(context):
+    #收盘价判断是否清除仓位
+    if(len(context.portfolio.positions.keys())>0):
+        for stock in context.portfolio.positions.keys():
+             last_price_dict = get_current_data()
+             current_price=last_price_dict[stock].last_price 
+             closeable_amount = context.portfolio.positions[stock].closeable_amount
+             cost_price = context.portfolio.positions[stock].avg_cost
+             price_change = (current_price -cost_price)/cost_price
+             df = get_price(stock, end_date=context.previous_date, frequency='daily', fields=['close'], skip_paused=True, fq='pre', count=1)
+             if df.empty:
+                 continue
+             pre_close_price = df['close'][0]
+             if(closeable_amount>0 and price_change>g.stop_win):
+                  sell_stock(stock,0)
+                  log.info(str(get_security_info(stock).display_name)+"  卖出止赢")
+                  
+             elif(closeable_amount>0 and current_price<g.stop_loss_per*pre_close_price):
+                  sell_stock(stock,0)
+                  log.info(str(get_security_info(stock).display_name)+"  跌破昨日收盘价4%,尾盘卖出")
+             else:
+                 log.info(str(get_security_info(stock).display_name)+"   尾盘没有卖出操作")
+
+def check_position_number(context):
+    #检查持仓数量，决定是否买入新股票
+    stock_number = len(context.portfolio.positions.keys())
+    if(stock_number==g.max_number_stock):
+        log.info('持仓已满，不再买入新股票')
+        return False
+    else:
+        return True
+           
+## 收盘后运行函数
+def after_market_close(context):
+    #log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    pass
+    
+def Get_all_security_list(context):
+    security_list=[]
+    stocks = list(get_all_securities(['stock']).index)
+    for stock in stocks:
+         security_obj = get_security_info(stock)
+         if(str(security_obj.type) == 'stock'):
+             if(context.current_dt.date()<security_obj.end_date and security_obj.start_date<context.current_dt.date()):#过滤掉退市的公司和相关新股
+                     security_list.append(stock)
+             else:
+                     pass
+         else:
+             log.info('不是股票类型') 
+             
+    #log.info('包括停牌在内所有公司数量 = ',len(security_list))
+    ####
+    security_list = filter_st_and_paused(security_list)
+    
+    #log.info('去除ST和停牌的公司数量： ',len(security_list)) 
+    
+    security_list = filter_kc_ban(security_list)
+    
+    #log.info('去除科创板的公司数量： ',len(security_list)) 
+    
+    #security_list = filter_gem_stock(security_list)
+    
+    #log.info('去除创业板的公司数量： ',len(security_list)) 
+    
+    security_list =filter_new(context,security_list,g.count)
+    
+    #log.info('去除上市不足30天的数量： ',len(security_list)) 
+    
+    security_list = industry_filter(context, security_list, g.industry_list)
+    
+    return security_list
+
+    
+def filter_new(context, equity, deltaday):
+    deltaDate = context.current_dt.date() - dt.timedelta(deltaday)
+
+    tmpList = []
+    for stock in equity:
+        if get_security_info(stock).start_date < deltaDate:
+            tmpList.append(stock)
+
+    return tmpList  
+    
+def filter_st_and_paused(stock_list):
+     current_data = get_current_data()
+     retult_list=[]
+     for stock in stock_list:
+         if( not current_data[stock].is_st and not current_data[stock].paused):
+             retult_list.append(stock)
+     return retult_list
+     
+
+
+def filter_kc_ban(stock_list):
+    #过滤科技板
+    return [stock for stock in stock_list if stock[0:3] != '688']
+    
+#过滤创业板    
+def filter_gem_stock(stock_list):
+    return [stock for stock in stock_list if stock[0:3] != '300']    
+    
+#查找昨天是不是涨停板：
+def find_predata_up_limted(context , stock_list):
+    if(len(stock_list)<0):
+        return None
+    df_data = get_price(stock_list, end_date=context.previous_date, frequency='daily', fields=['close', 'high_limit','low_limit'], skip_paused=True, fq='pre', count=1, panel=False)
+    ##
+    df = df_data[df_data['high_limit']==df_data['close']]
+    up_limit_list = df.code.values.tolist()          
+    return up_limit_list  
+
+
+industry_list1 = ["801010","801020","801030","801040","801050","801080","801110","801130","801140","801150","801160","801170","801180","801200","801210","801230","801710","801720","801730","801740","801750","801760","801770","801780","801790","801880","801890"]
+industry_list2 = ["801080","801110","801130","801140","801150","801200","801210","801230","801730","801740","801750","801760","801770","801880","801890"]
+g.industry_list= list(set(industry_list1).union(set(industry_list2)))
+def industry_filter(context, security_list, industry_list):
+    if len(industry_list) == 0:
+        # 返回股票列表
+        return security_list
+    else:
+        securities = []
+        for s in industry_list:
+            temp_securities = get_industry_stocks(s)
+            securities += temp_securities
+        security_list = [stock for stock in security_list if stock in securities]
+        # 返回股票列表
+        return security_list

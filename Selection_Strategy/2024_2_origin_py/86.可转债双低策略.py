@@ -90,7 +90,7 @@ def get_before_after_trade_days(date, count, is_before=True):
     else :
         return all_date[all_date>date].head(count).values[-1]
 
-#获得具体某只可转债指定日期可转债价格，股票价格，行权价格双低值，是否到期，是否可交易等信息
+# 获得具体某只可转债指定日期可转债价格，股票价格，行权价格双低值，是否到期，是否可交易等信息
 def get_bond_detail(code, date):
     today_date = datetime.datetime.strptime(str(date), "%Y-%m-%d")
     today = today_date.strftime("%Y-%m-%d")
@@ -139,7 +139,7 @@ def get_bond_detail(code, date):
     strike_price = price_change[price_change.adjust_date.map(lambda x:x.strftime("%Y-%m-%d")<=stock_date)].tail(1).reset_index(drop=True).loc[0, 'new_convert_price']
     cur_price = price_df.tail(1).reset_index(drop=True).loc[0, 'close']
     
-    #获得可转债价格，用于计算双低值
+    # 获得可转债价格，用于计算双低值
     bond_price_df = bond.run_query(query(bond.CONBOND_DAILY_PRICE).filter(bond.CONBOND_DAILY_PRICE.date== stock_date,
                                                          bond.CONBOND_DAILY_PRICE.code==code).limit(1000))
     bond_price = bond_price_df.tail(1).reset_index(drop=True).loc[0, 'close']
@@ -283,3 +283,123 @@ def sell_bond(date, hold_bond):
                 for val in hold_bond:
                     if(val[0]==code):
                         money = money + bond_price*val[2]
+                        hold_bond.remove(val)
+                        break
+    return money, hold_bond
+
+def update_bond_price(date, hold_bond):
+    conv_bond_info = get_bond_info(date)
+    hold_bond_code_lst = []
+    new_hold_bond = []
+    for val in hold_bond:
+        hold_bond_code_lst.append(val[0])
+        new_hold_bond.append((val[0], val[1], val[2]))
+    bond_to_calc = conv_bond_info[conv_bond_info.code.map(lambda x:x in hold_bond_code_lst)].reset_index(drop=True)
+    for conv_bond in bond_to_calc.iterrows():
+        code = conv_bond[1].code
+        bond_price = conv_bond[1].bond_price
+        tradeable = conv_bond[1].tradeable
+        delist = conv_bond[1].is_delist
+        if((tradeable) and (bond_price>0)):
+            for val in new_hold_bond:
+                if(val[0]==code):
+                    new_val = (val[0], bond_price, val[2])
+                    new_hold_bond.remove(val)
+                    new_hold_bond.append(new_val)
+                    break
+    return new_hold_bond
+        
+
+def get_bond_total_val(holding_bond):
+    total_val = 0
+    for val in holding_bond:
+        total_val = total_val + val[1]*val[2]
+    return total_val
+
+def backtest(start_date, trading_dates, select_target_func, money, candidate_bond_num, trade_interval=1):
+    date = start_date
+    cur_trade_date = get_before_after_trade_days(date, 1, is_before=False)
+    left_trade_date = trading_dates
+    result = []
+    cur_money = money
+    holding_bond = []
+    interval = 0
+    while(left_trade_date>0):
+        #print('backtest|date:{}|left:{}'.format(cur_trade_date, left_trade_date))
+        if(interval == 0):
+            sell_money, remain_bond = sell_bond(cur_trade_date, holding_bond)
+            cur_money = sell_money + cur_money
+            target_trade_result = select_target_func(date=cur_trade_date, candidate_num=candidate_bond_num, money=cur_money)
+            cur_money = 0
+            holding_bond = remain_bond + target_trade_result
+            interval = trade_interval-1
+        else:
+            holding_bond = update_bond_price(cur_trade_date, holding_bond)
+            interval = interval-1
+        total_value = get_bond_total_val(holding_bond)
+        #print('date:{}|hold_bond:{}|value:{}'.format(cur_trade_date, holding_bond, total_value))
+        result.append((cur_trade_date, total_value))
+        cur_trade_date = get_before_after_trade_days(cur_trade_date, 1, is_before=False)
+        left_trade_date = left_trade_date - 1
+    print(holding_bond)
+    return result
+
+def get_result_value(result):
+    dates = []
+    value_all = []
+    for val in result:
+        dates.append(val[0])
+        value_all.append(val[1])
+    return dates, value_all
+
+def plot_backtest_result(result_map):
+    data_num = 10
+    plt.figure(dpi=180)
+    for key in result_map.keys():
+        result = result_map[key]
+        dates, value_all = get_result_value(result)
+        date_num = len(dates)
+        #print('tag:{}|date:{}|val:{}'.format(key, dates, value_all))
+        plt.plot(dates, value_all, label=key)
+    plt.legend()
+    plt.xlabel('date')
+    multiplier = int(date_num / data_num)
+    if(multiplier > 1):
+        plt.gca().xaxis.set_major_locator(ticker.MultipleLocator(multiplier))
+    plt.ylabel('value')
+    plt.title('backtest')
+    plt.gcf().autofmt_xdate()
+    plt.show()
+
+def show_backtest_result(start_date, days):
+    trading_dates = days
+    result = backtest(start_date=start_date, trading_dates=trading_dates, select_target_func=get_target_conv_bond_by_double_low, money=10000, candidate_bond_num=10)
+    benchmark_result = backtest(start_date=start_date, trading_dates=trading_dates, select_target_func=get_benchmark_conv_bond, money=10000, candidate_bond_num=10)
+    result_lst = {'double_low':result, 'benchmark':benchmark_result}
+    plot_backtest_result(result_lst)
+
+
+# In[12]: (已移除或注释)
+
+
+result=get_bond_info('2022-04-15')
+
+
+# In[ ]: (已移除或注释)
+
+
+# 拉取所需数据，以dataframe保存成文件，方便回测使用
+# 一天数据需6min左右，请耐心等待
+date = '2020-09-22'
+end_date = '2022-04-09'
+cur_date = date
+while(cur_date < end_date):
+    get_bond_info(cur_date)
+    cur_date = get_before_after_trade_days(cur_date, 1, is_before=False)
+
+
+# In[ ]: (已移除或注释)
+
+
+# 展示从2020-09-22开始一年的收益率
+show_backtest_result('2020-09-22', 240)

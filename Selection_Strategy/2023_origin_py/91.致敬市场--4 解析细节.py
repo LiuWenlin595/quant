@@ -104,10 +104,10 @@ def report_porfolio(context):
         ps = context.portfolio.positions[s]
         ptable.loc[s] = [cdata[s].name, ps.total_amount, 100*ps.value/tvalue]
         ptable = ptable.sort_values(by='weight', ascending=False)
-    # report
-    pd.set_option('display.max_rows', len(ptable)+1)
-    log.info('\n', ptable)
-    log.info('Total positions', len(ptable))
-    # save
-    write_file(g.file_name, ptable.to_csv())
+        # report
+        pd.set_option('display.max_rows', len(ptable)+1)
+        log.info('\n', ptable)
+        log.info('Total positions', len(ptable))
+        # save
+        write_file(g.file_name, ptable.to_csv())
 # end

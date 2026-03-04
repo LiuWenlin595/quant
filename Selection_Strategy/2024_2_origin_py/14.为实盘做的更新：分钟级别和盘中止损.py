@@ -153,4 +153,185 @@ def get_stock_rank_m_m(stock_list):
     min_increase60d = min(increase60d)
     
     # 流通市值最小的
-    min_circulating_market
+    min_circulating_market_cap = min(rank_stock_list['circulating_market_cap'])
+    
+    # 总市值最小的
+    min_market_cap = min(rank_stock_list['market_cap'])
+    
+    # 5日累计成交量最小的
+    min_volume = min(volume5d)
+
+    # 按权重各项取对数累加
+    totalcount = [[i, 
+                            math.log(min_volume / volume5d[i]) * g.weights[3] + 
+                            math.log(min_price / current_price[i]) * g.weights[2] + 
+                            math.log(min_circulating_market_cap / rank_stock_list['circulating_market_cap'][i]) * g.weights[1] + 
+                            math.log(min_market_cap / rank_stock_list['market_cap'][i]) * g.weights[0] + 
+                            math.log(min_increase60d / increase60d[i]) * g.weights[4]] 
+                            
+                for i in rank_stock_list.index]
+    
+    # 累加后排序
+    totalcount.sort(key=lambda x:x[1])
+    
+    # 保留最多g.sellrank设置的个数股票代码返回
+    return [rank_stock_list['code'][totalcount[-1-i][0]] for i in range(min(g.sellrank, len(rank_stock_list)))]
+
+# 调仓策略：控制在设置的仓位比例附近，如果过多或过少则调整
+# 熊市时按设置的总仓位比例控制
+def my_adjust_position(context, hold_stocks):
+    # 按是否择时、牛熊市等条件计算个股资金正常占比和最大占比
+    if g.choose_time_signal and (not g.isbull):
+        free_value = context.portfolio.total_value * g.bearpercent
+        maxpercent = 1.3 / g.stocknum * g.bearpercent
+    else:
+        free_value = context.portfolio.total_value
+        maxpercent = 1.3 / g.stocknum
+    buycash = free_value / g.stocknum
+    
+    # 持有的股票如果不在选股池，没有涨停就卖出；如果仓位比重大于最大占比限制，就降到正常仓位比重
+    for stock in context.portfolio.positions.keys():
+        current_data = get_current_data()
+        price1d = get_close_price(stock, 1)
+        nosell_1 = context.portfolio.positions[stock].price >= current_data[stock].high_limit
+        sell_2 = stock not in hold_stocks
+        if sell_2 and not nosell_1:
+            close_position(stock)
+        else:
+            current_percent = context.portfolio.positions[stock].value / context.portfolio.total_value
+            if current_percent > maxpercent:order_target_value(stock, buycash)
+
+# 买入函数
+def mybuy(context):
+    if g.stop_run:
+        log.info("当前策略净值回撤达到30%, 策略可能失效，策略不再买入")
+        return
+    if not g.nohold and not g.stop_run:
+        # 避免卖出的股票马上买入
+        hold_stocks = filter_buyagain(g.chosen_stock_list)
+        log.info("待买股票列表：%s" %(hold_stocks))
+        
+        # 正常最低买入7成仓，如果熊市打折
+        if g.choose_time_signal and (not g.isbull):
+            free_value = context.portfolio.total_value * g.bearpercent
+            minpercent = 0.7 / g.stocknum * g.bearpercent
+        else:
+            free_value = context.portfolio.total_value
+            minpercent = 0.7 / g.stocknum
+        buycash = free_value / g.stocknum
+    
+        for i in range(min(g.buyrank, len(hold_stocks))):
+            free_cash = free_value - context.portfolio.positions_value
+            if hold_stocks[i] not in get_blacklist() and free_cash > context.portfolio.total_value / (g.stocknum * 10): # 黑名单里的股票不买
+                if hold_stocks[i] in context.portfolio.positions.keys():
+                    log.info("已经持有股票：[%s]" %(hold_stocks[i]))
+                    current_percent = context.portfolio.positions[hold_stocks[i]].value / context.portfolio.total_value
+                    if  current_percent >= minpercent:continue
+                    tobuy = min(free_cash, buycash - context.portfolio.positions[hold_stocks[i]].value)
+                else:
+                    tobuy = min(buycash, free_cash)
+                order_value(hold_stocks[i], tobuy)
+
+# 牛熊市场判断函数
+def get_bull_bear_signal_minute():
+    nowindex = get_close_price(g.MA[0], 1, '1m')
+    MAold = (attribute_history(g.MA[0], g.MA[1] - 1, '1d', 'close', df=False)['close'].sum() + nowindex) / g.MA[1]
+    
+    # 牛熊切换阈值g.threshold = 0.003 
+    
+    if g.isbull:
+        # 现价比10日均价低，两者差值大于阈值时转熊
+        if nowindex * (1 + g.threshold) <= MAold:
+            g.isbull = False
+    else:
+        # 现价比10日均价高，两者差值大于阈值时转牛
+        if nowindex > MAold * (1 + g.threshold):
+            g.isbull = True
+
+def before_trading_start(context):
+    g.value.append(int(context.portfolio.total_value))
+    g.value = g.value[-100:]
+    log.info(g.value)
+    # 计算卖出后的天数
+    temp = g.sold_stock
+    g.sold_stock = {}
+    for stock in temp.keys():
+        if temp[stock] >= g.buyagain - 1:
+            pass
+        else:
+            g.sold_stock[stock] = temp[stock]+1
+    # 股票初选
+    g.chosen_stock_list = get_stock_list(context)
+
+def myscheduler():
+    set_param()
+    unschedule_all()
+    run_daily(gogogo, '14:39')
+    run_daily(mybuy, '14:45')
+    run_daily(risk_management, 'every_bar')
+    
+def after_code_changed(context):
+    myscheduler()
+    try:
+        if g.value[-1]>0: 
+            pass 
+    except:
+        g.value = [context.portfolio.total_value]*100
+    g.stop_run = False
+
+def initialize(context):
+    set_option('use_real_price', True)
+    # set_option('avoid_future_data', True) # 一创没有此API 
+    log.set_level('order', 'error')
+    log.set_level('history', 'error')
+    myscheduler()
+    g.isbull = False # 是否牛市
+    g.chosen_stock_list = [] # 存储选出来的股票
+    g.nohold = True # 空仓专用信号
+    g.sold_stock = {} # 近期卖出的股票及卖出天数
+
+# 卖出、调仓函数
+def gogogo(context):
+    # 运行牛熊判断函数, 返回g.isbull
+    get_bull_bear_signal_minute()
+    if g.isbull:
+        log.info("当前市场判断为：牛市")
+    else:
+        log.info("当前市场判断为：熊市")
+    if g.choose_time_signal and (not g.isbull) and (not g.bearposition) or len(g.chosen_stock_list) < 10:
+        clear_position(context)
+        g.nohold = True
+    else:
+        g.chosen_stock_list = get_stock_rank_m_m(g.chosen_stock_list)
+        log.info(g.chosen_stock_list)
+        my_adjust_position(context, g.chosen_stock_list)
+        g.nohold = False
+
+# 盘中浮亏止损，从2020年开始
+def risk_management(context):
+    if context.current_dt.year<2020: return
+    for stock in context.portfolio.positions.keys():
+        # 计算个股即时的浮动盈亏
+        fuying =  context.portfolio.positions[stock].price/ context.portfolio.positions[stock].avg_cost-1
+        current_data = get_current_data()
+        price1d = get_close_price(stock, 1)
+        nosell_1 = context.portfolio.positions[stock].price >= current_data[stock].high_limit
+        # 浮动亏6.5个百分点卖出
+        if fuying < -0.065 and not nosell_1:
+            close_position(stock)
+            
+    if context.portfolio.total_value<max(g.value)*0.70:
+        g.stop_run = True
+        log.info("当前策略净值回撤达到30%, 策略可能失效，需要清仓后做重新评估")
+        for stock in context.portfolio.positions.keys():
+            # 计算个股即时的浮动盈亏
+            fuying =  context.portfolio.positions[stock].price/ context.portfolio.positions[stock].avg_cost-1
+            current_data = get_current_data()
+            price1d = get_close_price(stock, 1)
+            nosell_1 = context.portfolio.positions[stock].price >= current_data[stock].high_limit
+            # 浮动亏6.5个百分点卖出
+            if not nosell_1:
+                close_position(stock)        
+        
+def get_blacklist():
+    return[]

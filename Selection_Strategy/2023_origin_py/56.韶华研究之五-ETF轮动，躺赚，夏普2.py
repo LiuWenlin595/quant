@@ -265,4 +265,70 @@ def get_BBI_filter(context):
     
     #获取基准指数的今日涨幅，用于判断开关仓
     for idx in g.index_list:
-        #原版取得是昨
+        #原版取得是昨天的收盘价和今天11:15的价格
+        df_close = get_bars(idx, 2, '1d', ['close'],  end_dt=context.current_dt,include_now=True)
+        change = (df_close['close'][-1] - df_close['close'][0]) / df_close['close'][0]
+        df_change = df_change.append({'code': idx, 'change': change}, ignore_index=True)
+        
+    df_change.sort_values(by='change', ascending=False, inplace=True)  #降序排列
+    log.info(df_change)
+    #取值最大的一个，用于和阈值-0做比对
+    max_change = df_change['change'].values[0]
+
+    for i in range(g.poolnum):
+        idx = df_bbi['code'].values[i]
+        poollist.append(g.etf_list[idx])
+
+    log.info(poollist)
+    
+    return max_change,poollist
+    
+#以etf指数周期内的涨幅来排序，以基准周期内的涨幅来衡量开关仓
+def get_increase_filter(context):
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    all_data = get_current_data()
+    poollist =[]
+    
+    #判断各etf指数的周期涨幅，输出并排序
+    df_close = get_price(g.available_indexs,end_date=lastd_date,count =g.check_unit,frequency='daily')  #间接判断对应指数的日行情
+    #df_close = get_price(g.etf_list,end_date=lastd_date,count =g.check_unit,frequency='daily') #直接判断ETF日行情
+    df_increase = df_close['close'].pct_change(periods=g.check_unit-1).dropna().T
+    log.info(df_increase)
+    df_increase.columns =['etf_change']
+    df_increase.sort_values(by='etf_change', ascending=False, inplace=True)  #降序排列
+    
+    log.info(df_increase)
+    
+    #获取基准指数的今日涨幅，用于判断开关仓
+    df_change = pd.DataFrame(columns=['code', 'change'])
+    for idx in g.index_list:
+        #原版取得是昨天的收盘价和今天11:15的价格
+        df_close = get_bars(idx, g.check_unit, '1d', ['close'],  end_dt=context.current_dt,include_now=True)
+        change = (df_close['close'][-1] - df_close['close'][0]) / df_close['close'][0]
+        df_change = df_change.append({'code': idx, 'change': change}, ignore_index=True)
+        
+    df_change.sort_values(by='change', ascending=False, inplace=True)  #降序排列
+    log.info(df_change)
+    #取值最大的一个，用于和阈值-0做比对
+    max_change = df_change['change'].values[0]
+    
+    #间接从指数对应到ETF
+    for i in range(g.poolnum):
+        idx = df_increase.index.values[i]
+        poollist.append(g.etf_list[idx])
+    
+    #poollist = df_increase.index.values.tolist()[:g.poolnum]   #直接取ETF列表
+
+    log.info(poollist)
+    
+    return max_change,poollist
+
+"""
+---------------------------------函数定义-次要过滤-----------------------------------------------
+"""
+
+
+"""
+---------------------------------函数定义-辅助函数-----------------------------------------------
+"""

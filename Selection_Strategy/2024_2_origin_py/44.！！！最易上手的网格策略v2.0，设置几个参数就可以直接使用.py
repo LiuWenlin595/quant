@@ -165,4 +165,74 @@ def handle_data(context, data):
                     # log.info("buy_base_pri：%s" % (buy_base_pri))
                     # log.info("本层卖出条件为：%s" % (buy_base_pri * ( 1 - net_layer * g.net_range + 0.1)))
                     # log.info("当前价格和buy_base_pri比为%s" % ((cur_pri/buy_base_pri-1)*100))
-                    # log.info("符合卖出的条件，由于在第一
+                    # log.info("符合卖出的条件，由于在第一层，全部卖出，卖出%s股" % (order_res.filled))
+                    log.info('订单状态：')
+                    log.info(order_res)
+                    log.info(context.portfolio.positions)
+                    if order_res and str(order_res.status) in ['held', 'filled']:
+                        # log.info("第%s层卖出" % (net_layer) + etf + ": ")
+                        # log.info("总额：%s元，数量：%s份，单价：%s元" % (round(order_res.price*order_res.filled, 2), round(order_res.filled, 2), round(order_res.price, 2))) 
+                        g.buy_amount[etf].pop()
+                        g.net[etf] = g.net[etf] - 1
+                        if g.net[etf] == 0:
+                            del g.net[etf]
+                            del g.buy_amount[etf]
+                        # log.info("当前持有的基金的买入层数为：")
+                        # log.info(g.net)    
+                        # log.info("每一层的成交金额为")
+                        # log.info(g.buy_amount)
+                else:
+                    # tmp = (g.buy_amount[etf][0]*( 1 - net_layer * g.net_range + 0.1)/cur_pri) % 100
+                    buy_in_rate = ( 1 - (net_layer - 1) * g.net_range)
+                    sell_out_rate = ( 1 - (net_layer - 2) * g.net_range)
+                    tmp = (g.buy_amount[etf][0]*( 1 + (sell_out_rate - buy_in_rate)/buy_in_rate)/cur_pri) % 100
+                    log.info("cur_pri:%s" %  (cur_pri))
+                    log.info("buy_in_rate:%s" %  (buy_in_rate))
+                    log.info("sell_out_rate:%s" %  (sell_out_rate))
+                    log.info("g.buy_amount[etf][0]:%s" %  (g.buy_amount[etf][0]))
+                    log.info("g.buy_amount[etf][0]*( 1 + (sell_out_rate - buy_in_rate)/buy_in_rate):%s" %  (g.buy_amount[etf][0]*( 1 + (sell_out_rate - buy_in_rate)/buy_in_rate)))
+                    log.info("tmp:%s" %  (g.buy_amount[etf][0]*( 1 + (sell_out_rate - buy_in_rate)/buy_in_rate)/cur_pri))
+                    if tmp <= 1:
+                        sell_num = (g.buy_amount[etf][0]*( 1 + (sell_out_rate - buy_in_rate)/buy_in_rate)/cur_pri)
+                    else:
+                        # sell_num = int(g.buy_amount[etf][0]*( 1 + (sell_out_rate - buy_in_rate)/buy_in_rate)/cur_pri) + 100
+                        sell_num = int(g.buy_amount[etf][0]*( 1 + (sell_out_rate - buy_in_rate)/buy_in_rate)/cur_pri) + 100
+                    order_res = order(etf, -sell_num)
+                    log.info("当前处于第%s层，%s的当前价格为:%s, buy_base_pri：%s, 本层卖出条件为：%s,当前价格和buy_base_pri比为%s，符合卖出的条件，卖出%s股" % (g.net[etf], etf, cur_pri, buy_base_pri, buy_base_pri * ( 1 - net_layer * g.net_range + 0.1) ,(cur_pri/buy_base_pri-1)*100 ,sell_num))
+    
+                    if order_res and str(order_res.status) in ['held', 'filled']:
+                        # log.info("第%s层卖出" % (net_layer) + etf + ": ")
+                        # log.info("总额：%s元，数量：%s份，单价：%s元" % (round(order_res.price*order_res.filled, 2), round(order_res.filled, 2), round(order_res.price, 2))) 
+                        g.buy_amount[etf].pop()
+                        g.net[etf] = g.net[etf] - 1
+                        if g.net[etf] == 0:
+                            del g.net[etf]
+                            del g.buy_amount[etf]
+                        # log.info("当前持有的基金的买入层数为：")
+                        # log.info(g.net)    
+                        # log.info("每一层的成交金额为")
+                        # log.info(g.buy_amount)  
+            
+            if cur_pri < buy_base_pri * ( 1 - net_layer * g.net_range):
+                if g.net[etf] < g.max_net:
+                    order_res = order_value(etf, g.per_share)
+                    if order_res and str(order_res.status) in ['held', 'filled']:
+                        # log.info("第%s层买入" % (net_layer+1) + etf + ": ")
+                        # log.info("总额：%s元，数量：%s份，单价：%s元" % (round(order_res.price*order_res.filled, 2), round(order_res.filled, 2), round(order_res.price, 2)))
+                        g.net[etf] = g.net[etf] + 1
+                        g.buy_amount[etf].append(order_res.filled * order_res.price)
+                        # log.info("当前持有的基金的买入层数为：")
+                        # log.info(g.net)    
+                        # log.info("每一层的成交金额为")
+                        # log.info(g.buy_amount)  
+            
+    # 当天收盘输出持仓
+    if  context.current_dt.hour == 14 and context.current_dt.minute == 59:
+        log.info("当前持有的基金的买入层数为：")
+        log.info(g.net)    
+        log.info("每一层的买入份数为")
+        log.info(g.buy_amount)       
+        log.info("基金买入成本为：")
+        for _, fund in context.portfolio.positions.items():
+            log.info('%s当前价格为%s：累计的持仓成本:%s, 当前持仓成本:%s, 当日持仓成本:%s' % (fund.security, fund.price, fund.acc_avg_cost, fund.avg_cost, fund.hold_cost))
+            log.info('总仓位：%s' % (fund.total_amount))

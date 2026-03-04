@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 from jqdata import *
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -15,9 +12,6 @@ warnings.filterwarnings('ignore')
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 中文字体设置-黑体
 plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
-
-
-# In[2]:
 
 
 def getStockIndustry(p_stocks, p_industries_type, p_day):
@@ -36,9 +30,6 @@ def getStockIndustry(p_stocks, p_industries_type, p_day):
             dict_stk_2_ind[stock] = stocks_industry_dict[stock][p_industries_type]['industry_code']
     #
     return pd.Series(dict_stk_2_ind)
-
-
-# In[3]:
 
 
 def get_industry_width(p_end_date, p_count, p_industries_type):
@@ -85,9 +76,6 @@ def get_industry_width(p_end_date, p_count, p_industries_type):
     return df_result
 
 
-# In[4]:
-
-
 def show_industry_width(p_count, df):
     fig = plt.figure(figsize=(16, p_count))
     grid = plt.GridSpec(1, 10)
@@ -109,16 +97,4 @@ def show_industry_width(p_count, df):
     df[df.columns[-1]].plot()
 
 
-# In[6]:
-
-
-# 行业分类
-industries_type = 'sw_l1'
-# "sw_l1": 申万一级行业
-# "jq_l1": 聚宽一级行业
-end_date = datetime.date(2021, 6, 18)
-# 计算天数
-count_ = 200
-#
-market_capacity_daily = get_industry_width(end_date, count_, industries_type)
-show_industry_width(count_, market_capacity_daily)
+# get_ipython().run_cell_magic('time', '', '# 行业分类\nindustries_type = \'sw_l1\'\n# "sw_l1": 申万一级行业\n# "jq_l1": 聚宽一级行业\nend_date = datetime.date(2021, 6, 18)\n# 计算天数\ncount_ = 200\n#\nmarket_capacity_daily = get_industry_width(end_date, count_, industries_type)\nshow_industry_width(count_, market_capacity_daily)')

@@ -161,4 +161,296 @@ def before_market_open(context):
         stocklist = get_trend_filter(context,stocklist,lastd_date,g.short_duration,'1d',g.trend_up,g.trend_down)
         
     num3 = len(stocklist)
-    end_time = time
+    end_time = time.time()
+    print('Step2,主策略%s,筛选出%d只标的,构建耗时:%.1f 秒' % (g.strategy,num3,end_time-start_time))
+    
+    if 'R' in g.pool_filter:
+        start_time = time.time()
+        stocklist = get_rise_filter(context,stocklist,g.index,g.short_duration,g.rise_uplimit)
+        #stocklist = get_rise_filter(context,stocklist,g.mid_duration,3)
+        #stocklist = get_rise_filter(context,stocklist,g.long_duration,4)
+        num4 = len(stocklist)
+        end_time = time.time()
+        print('Step2-R,涨幅过滤出共%d只,构建耗时:%.1f 秒' % (len(stocklist),end_time-start_time))
+    #根据预设的持仓数和池数进行标的的选择        
+    if g.stocknum ==0 or len(stocklist) <= g.stocknum:
+        g.poollist = stocklist
+        g.buylist = stocklist
+    else:
+        
+        if g.poolnum >=g.stocknum:
+            g.poollist =stocklist[:g.poolnum]
+        else:   #小于即比例关系
+            g.poollist = stocklist[:int(g.poolnum*len(stocklist))]
+        
+        #g.poollist =stocklist
+        g.buylist = stocklist[:g.stocknum]
+        
+    log.info('今日票池:')
+    log.info(g.poollist)
+    
+    log.info('今日买信:')
+    log.info(g.buylist)
+    
+    log.info('今日卖信:')
+    log.info(g.selllist)
+    
+    outlist = [stockcode for stockcode in holdlist if not stockcode in g.poollist]
+    log.info('今日待出:')
+    log.info(outlist)
+    
+## 开盘时运行函数
+def market_open(context):
+    log.info('函数运行时间(market_open):'+str(context.current_dt.time()))
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+    
+    #1，先卖，分为lost_control和定期换仓
+    #止损卖信
+    if (g.lostcontrol !=0) and (len(g.selllist) != 0):
+        #log.info('大风来袭,全部撤退')   #for 全卖
+        log.info('大风来袭,逐个撤退')   #for 单卖
+        for stockcode in context.portfolio.positions:
+            if current_data[stockcode].paused == True:
+                continue
+            #此处有两种控损模式，一种是第一次出现卖出即清仓，另一种则是逐个卖出
+            if stockcode in g.selllist:
+                sell_stock(context, stockcode,0)
+
+    #0,判断是否换仓日
+    if g.adjustpositions ==False:
+        log.info('今天是持仓日')
+        return
+    if len(g.poollist) ==0:
+        log.info('今天无信')
+        return
+    #1，持仓不在池的卖出
+    #因为定期选出的票池数目不固定，全部清出后再重新分配资金买入，以便分析
+    for stockcode in context.portfolio.positions:
+        stockname = get_security_info(stockcode).display_name
+        if current_data[stockcode].paused == True:
+            continue
+        if stockcode in g.poollist: #只取前stocknum的
+            continue
+        #非停不在买单则清仓
+        sell_stock(context,stockcode,0)
+
+    #2，判断持股数，平均分配买信
+    if (len(context.portfolio.positions) >= g.stocknum):# and (context.portfolio.available_cash < 0.1*context.portfolio.total_value):
+        return
+    else:
+        cash = context.portfolio.total_value/g.stocknum
+        for stockcode in g.buylist:
+            stockname = get_security_info(stockcode).display_name
+
+            if current_data[stockcode].paused == True:
+                continue
+            #不光新买，旧仓也做平衡均分
+            buy_stock(context,stockcode,cash)
+            
+            if (len(context.portfolio.positions) >= g.stocknum):
+                return
+    
+## 收盘时运行函数
+def market_close(context):
+    log.info('函数运行时间(market_close):'+str(context.current_dt.time()))
+            
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+
+    
+"""
+---------------------------------函数定义-主要策略-----------------------------------------------
+"""
+#趋势过滤，根据周期，上下限
+#8.25 添加趋势通道中发现coef系数和股价大小有正相关，因此除以周期均值去除相关性
+def get_trend_filter(context,stocklist,check_date,trend_duration,trend_unit,trend_up,trend_down):
+    poollist =[]
+    
+    #取周期20/60的close
+    #df_price = history(trend_duration,'1d',field=g.fields_name,security_list=stocklist,df=True,skip_paused=True,fq='pre')
+    df_price = get_price(stocklist, count=trend_duration, end_date=check_date, frequency=trend_unit, fields=[g.fields_name])[g.fields_name]
+    df_price = df_price.T
+    df_price.fillna(method='ffill',inplace=True)
+    #log.info(df_price)
+    #获取回归系数，并递减排序
+    df_price['coef'] = [fit_linear_nor(df_price.iloc[i][:]) for i in range(len(df_price))]
+    df_price['mean'] = [df_price.iloc[i][:].mean() for i in range(len(df_price))]
+    df_price['coef'] = df_price['coef']/df_price['mean'] #光coef系数和股价大小有很大关系，所以除以均值
+    #x = np.arange(trend_duration)
+    #df_price['coef'] = [linregress(x,df_price.iloc[i][:])[0] for i in range(len(df_price))]
+
+    if (trend_up + trend_down >=0):
+        df_price=df_price[(df_price.coef <trend_up)&(df_price.coef >trend_down)]   
+        df_price.sort_values('coef',ascending=False,inplace=True)
+    else:
+        df_price=df_price[(df_price.coef >trend_down)&(df_price.coef <trend_up)]   
+        df_price.sort_values('coef',ascending=True,inplace=True)
+        
+    #log.info(df_price.coef)
+    coef_mean = df_price.coef.values.mean()
+    poollist = df_price.index.tolist()
+    #write_file('test.csv', str('%s,%s,%s\n' % (check_date,len(poollist),coef_mean)),append = True)
+    return poollist
+    
+# 直线拟合--列表斜率
+def fit_linear_nor(lis):
+    model = LinearRegression()
+    x_train = np.arange(0, len(lis)).reshape(-1, 1)
+    y_train = np.array(lis).reshape(-1, 1)
+    model.fit(x_train, y_train)
+    m = model.coef_
+    m1 = round(float(m), 3)
+    return m1
+
+#对持仓个股进行止损判断，是则列入卖信
+def lost_control(context, stocklist, check_date):
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    poollist =[]
+    
+    if g.lostcontrol !=3:
+        for stockcode in context.portfolio.positions:
+            cost = context.portfolio.positions[stockcode].avg_cost
+            price = context.portfolio.positions[stockcode].price
+            value = context.portfolio.positions[stockcode].value
+            intime= context.portfolio.positions[stockcode].init_time
+            ret = price/cost
+            duration=len(get_trade_days(intime,today_date))
+            
+            #1-静态止损，止损线可调，-0.1-0.2
+            if g.lostcontrol ==1 or g.lostcontrol == 10:
+                if ret < g.drop_line:
+                    poollist.append(stockcode)
+                    continue
+            #2-动态止损，回落线可调，0.7-0.9
+            elif g.lostcontrol ==2 or g.lostcontrol == 10:
+                df_price = get_price(stockcode, count = g.drop_ma_days, end_date=lastd_date, frequency='daily', fields=['high','close'])
+                high_max = df_price['high'].max()
+                last_price = df_price['close'].values[-1]
+                if last_price/high_max <g.drop_line:
+                    poollist.append(stockcode)
+                    continue
+            #3-均线止损,均线可调，10-20-60-120
+            elif g.lostcontrol ==4:
+                MA_x = MA(stockcode, check_date=lastd_date, timeperiod=g.drop_ma_days)
+                if price < MA_x[stockcode]:
+                    poollist.append(stockcode)
+                    continue
+            #5-RSI止损，日期可调10-20-60，界线可调33-50-66
+            elif g.lostcontrol ==5 or g.lostcontrol == 10:
+                RSI_x = RSI(stockcode, check_date=lastd_date, N1=g.drop_ma_days)
+                if RSI_x[stockcode] <g.drop_rsi_value:
+                    poollist.append(stockcode)
+                    continue
+            #6-MACD死叉止损
+            elif g.lostcontrol ==6:
+                dif,dea,macd = MACD(stockcode, check_date=lastd_date, SHORT = 12, LONG = 26, MID = 9, unit='1d', include_now = True, fq_ref_date = None)
+                if dif[stockcode] < dea[stockcode]:
+                    poollist.append(stockcode)
+                    continue
+            #7-BOLL中轨止损
+            elif g.lostcontrol ==7:
+                upperband, middleband, lowerband = Bollinger_Bands(stockcode, check_date=lastd_date, timeperiod=g.drop_ma_days, nbdevup=2, nbdevdn=2)
+                if price < middleband[stockcode]:
+                    poollist.append(stockcode)
+                    continue
+            #8-SAR止损
+            elif g.lostcontrol ==8:
+                h = attribute_history(stockcode,120,'1d',['high','low','close'])
+                h['sar'] = np.round(SAR(h['high'].values, h['low'].values, N=g.drop_ma_days),3)
+                if h['close'][-1] <= h['sar'][-1]:
+                    poollist.append(stockcode)
+                    continue
+    #3-趋势止损，趋势周期可调，0.5-2*trenddays
+    else:
+        #取10/20/60/120为测量周期
+        df_price = history(g.drop_trend_dura,'1d',field='close',security_list=stocklist,df=True,skip_paused=True,fq='pre')
+        df_price = df_price.T
+        df_price.fillna(method='ffill',inplace=True)
+        #获取回归系数，并递减排序
+        df_price['coef'] = [fit_linear_nor(df_price.iloc[i][:]) for i in range(len(df_price))]
+    
+        df_price=df_price[df_price.coef <0]    
+        poollist = df_price.index.tolist()    
+        
+    return poollist
+"""
+---------------------------------函数定义-次要过滤-----------------------------------------------
+"""
+#去掉周期内涨幅过大的
+def get_rise_filter(context,stocklist,bench_index,duration,rise_level):
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    all_data = get_current_data()
+    poollist =[]
+    
+    #根据基准指数涨幅动态调整
+    if rise_level =='D':
+        df_idx_price = get_price(bench_index,end_date=lastd_date,frequency='daily',fields=['close'],count=duration)
+        idx_rise = df_idx_price.close[-1]/df_idx_price.close[0]
+        if idx_rise <1:
+            rise_level = 1
+        else:
+            rise_level = 1.2*idx_rise
+            
+    for stockcode in stocklist:
+        df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['close'],count=duration)
+        if df_price.close.max()/df_price.close.min() >rise_level:
+            continue
+        poollist.append(stockcode)
+    return poollist
+
+#对输入的标的进行动态回调，
+def get_drop_filter(context, stocklist, check_date):
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    all_data = get_current_data()
+    poollist =[]
+    
+    for stockcode in stocklist:
+        df_price = get_price(stockcode, count = g.drop_days, end_date=lastd_date, frequency='daily', fields=['high','close'])
+        high_max = df_price['high'].max()
+        last_price = df_price['close'].values[-1]
+        if last_price/high_max >g.drop_line:
+            poollist.append(stockcode)
+            continue
+        
+    return poollist
+
+"""
+---------------------------------函数定义-辅助函数-----------------------------------------------
+"""
+##买入函数
+def buy_stock(context,stockcode,cash):
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+    
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(1.1*last_price)) != None: #科创板需要设定限值
+            log.info('%s买入%s' % (today_date,stockcode))
+    else:
+        if order_target_value(stockcode, cash) != None:
+            log.info('%s买入%s' % (today_date,stockcode))
+            
+##卖出函数
+def sell_stock(context,stockcode,cash):
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+    
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(0.9*last_price)) != None: #科创板需要设定限值
+            log.info('%s卖出%s' % (today_date,stockcode))
+    else:
+        if order_target_value(stockcode,cash) != None:
+            log.info('%s卖出%s' % (today_date,stockcode))
+
+
+"""
+根据欧奈尔的统计，从20世纪50年代早期到2008年，表现最好的股票在其股票大涨前的平均RS值为87。
+因此，欧奈尔认为：PRS值为80或90以上，是买入一只股票前的必要筛选条件。
+https://xueqiu.com/1652627245/119664320
+"""

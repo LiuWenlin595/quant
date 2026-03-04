@@ -430,4 +430,43 @@ def close_account(context):
 
 
 def get_industry_name(i_Constituent_Stocks, value):
-    return
+    return [k for k, v in i_Constituent_Stocks.items() if value in v]
+
+
+# 缺失值处理
+def replace_nan_indu(factor_data, stockList, industry_code, date):
+    # 把nan用行业平均值代替，依然会有nan，此时用所有股票平均值代替
+    i_Constituent_Stocks = {}
+    data_temp = pd.DataFrame(index=industry_code, columns=factor_data.columns)
+    for i in industry_code:
+        temp = get_industry_stocks(i, date)
+        i_Constituent_Stocks[i] = list(set(temp).intersection(set(stockList)))
+        data_temp.loc[i] = mean(factor_data.loc[i_Constituent_Stocks[i], :])
+    for factor in data_temp.columns:
+        # 行业缺失值用所有行业平均值代替
+        null_industry = list(data_temp.loc[pd.isnull(data_temp[factor]), factor].keys())
+        for i in null_industry:
+            data_temp.loc[i, factor] = mean(data_temp[factor])
+        null_stock = list(factor_data.loc[pd.isnull(factor_data[factor]), factor].keys())
+        for i in null_stock:
+            industry = get_industry_name(i_Constituent_Stocks, i)
+            if industry:
+                factor_data.loc[i, factor] = data_temp.loc[industry[0], factor]
+            else:
+                factor_data.loc[i, factor] = mean(factor_data[factor])
+    return factor_data
+
+def filter_paused_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list if not current_data[stock].paused]
+
+# 数据预处理
+def data_preprocessing(factor_data, stockList, industry_code, date):
+    # 去极值
+    factor_data = winsorize_med(factor_data, scale=5, inf2nan=False, axis=0)
+    # 缺失值处理
+    factor_data = replace_nan_indu(factor_data, stockList, industry_code, date)
+    # 标准化处理
+    factor_data = standardlize(factor_data, axis=0)
+
+    return factor_data

@@ -274,3 +274,13 @@ def print_trade_info(context):
         cost=position.avg_cost
         price=position.price
         ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+    print('一天结束')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

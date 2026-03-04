@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# (已移除或注释)
+# # In[1]:
+
 
 from jqdata import *
 
@@ -15,7 +16,8 @@ from scipy.signal import argrelextrema, argrelmax, argrelmin
 # 
 # 其中第三种模式：融合收盘价单调性和5周期均线的标准化，与研报算法完全不同，但效果一致，且本算法极其简练，还处理了研报中没有考虑的问题，比如收盘价等于均线。
 
-# (已移除或注释)
+# # In[2]:
+
 
 def normalize_monotone(close_ser: pd.Series) -> np.ndarray:
     """基于收盘价单调性的标准化"""
@@ -64,7 +66,8 @@ def normalize_compound(close_ser: pd.Series, window: int = 5) -> np.ndarray:
 # ## 二、势的度量：三种模式
 # ### 2.1 基于连续波段的势
 
-# (已移除或注释)
+# # In[3]:
+
 
 def continuous_score(x: np.ndarray) -> float:
     """基于连续波段的势"""
@@ -89,7 +92,8 @@ def continuous_score(x: np.ndarray) -> float:
 # 
 # 一开始，严格按照研报P.9-10页的定义去写算法，研报这部分试图用数学公式描述其算法，描述的晦涩难懂，看了半天，终于写出来如下函数，函数区分为三种情形分别处理，用到了`递归调用`，很复杂。
 
-# (已移除或注释)
+# # In[4]:
+
 
 # 废弃的绝对势计算函数
 def absolute_score2(x):
@@ -127,7 +131,8 @@ def absolute_score2(x):
 
 # 在测试函数正确性的时候，使用了研报P.11图13中的6个例子，一测，神奇地发现: `continuous_score`函数和`absolute_score2`函数计算出来的**势完全相同！明明算法迥异**啊。
 
-# (已移除或注释)
+# # In[5]:
+
 
 test_array = np.array([
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
@@ -154,7 +159,8 @@ for i in range(len(test_array)):
 # 
 # 基于以上发现，写出来一个极其简洁的绝对波动区间势函数（与P11图13的结果对上了）：
 
-# (已移除或注释)
+# # In[6]:
+
 
 def absolute_score(x: np.ndarray) -> float:
     """基于绝对波动区间的势"""
@@ -168,7 +174,8 @@ def absolute_score(x: np.ndarray) -> float:
     return trend
 
 
-# (已移除或注释)
+# # In[7]:
+
 
 # 验证
 test_array = np.array([
@@ -196,7 +203,8 @@ for i in range(len(test_array)):
 # 
 # 由于`绝对势永远是大于连续势`的，故研报取$max$没有意义，直接采用绝对势。故此，可以将势的终极定义写成如下函数：
 
-# (已移除或注释)
+# # In[8]:
+
 
 def ultimate_score(x: np.ndarray) -> float:
     """终极的势"""
@@ -208,7 +216,8 @@ def ultimate_score(x: np.ndarray) -> float:
     return trend
 
 
-# (已移除或注释)
+# # In[9]:
+
 
 # 验证
 # 验证时，使用了研报P.22图35的数据，本算法计算结果与研报图35完全一致。
@@ -231,7 +240,8 @@ for i in range(len(test_array)):
 # 
 # 上面代码较为零散，最后将之收录到一起。
 
-# (已移除或注释)
+# # In[10]:
+
 
 # ----------------------------------------------------------
 # 势的度量：三种模式
@@ -276,7 +286,8 @@ def ultimate_score(x: np.ndarray) -> float:
 
 # 应用上面的势函数，比较一下2021-3-8，湖北宜化、兴发集团和云天化，看看谁的势头更猛些。
 
-# (已移除或注释)
+# # In[11]:
+
 
 stock_list = ['000422.XSHE','600141.XSHG','600096.XSHG']  # 湖北宜化、兴发集团、云天化
 
@@ -287,9 +298,10 @@ h2 = h.apply(normalize_compound)
 s_score = h2.apply(ultimate_score, raw=True)
 
 
-# (已移除或注释)
+# # In[12]:
+
 
 s_score.sort_values(ascending=False)
 
 
-# (已移除或注释)
+# # In[ ]:

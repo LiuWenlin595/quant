@@ -207,4 +207,105 @@ def after_market_close(context):
         g.D_Macd=[]
     print ("剩余资金：%s" % (cash))
     print ("当前持仓：%s" % (init_sl))
-    print("运行天数：%s" % (g
+    print("运行天数：%s" % (g.t))
+    
+    
+
+# MACD 公用函数###############################################
+def MACD(close, fastperiod, slowperiod, signalperiod):
+    macdDIFF, macdDEA, macd = tl.MACDEXT(close, fastperiod=fastperiod, fastmatype=1, slowperiod=slowperiod, slowmatype=1, signalperiod=signalperiod, signalmatype=1)
+    macd = macd * 2
+    return macdDIFF, macdDEA, macd 
+# 查寻一个时间段内某标的的macd信息
+def get_macd(stock, count, end_date, unit):
+    data = get_bars(security=stock, count=count, unit=unit,
+                        include_now=False, 
+                        end_dt=end_date, fq_ref_date=True)
+    close = data['close']
+    open = data['open']
+    high = data['high']
+    low = data['low']
+
+    return MACD(close, 12, 26, 9)
+
+# 0上第一次死叉
+def is_second_low_gold_cross(macd_list):
+    macdDIFF, macdDEA, macd = macd_list
+    
+    cross_list = []
+    # 判断当前是否发生金叉，并且位置在0轴之下
+    if macdDIFF[-2] > macdDEA[-2] and macdDIFF[-1] < macdDEA[-1] and macd[-1]>macdDEA[-1]:
+        for i in range(4, len(macd)):
+            if macd[i-3]<macd[i-2]<macd[i-1]<macd[i] and macdDIFF[i-1] < macdDEA[i-1] and macdDIFF[i] > macdDEA[i]:
+                gold_cross = {'id':i,
+                              'name':'gold_cross',
+                              'dif':macdDIFF[i],
+                              'dea':macdDEA[i]}
+                cross_list.append(gold_cross)
+                
+            elif macd[i-3]>macd[i-2]>macd[i-1]>macd[i] and macdDIFF[i-1] > macdDEA[i-1] and macdDIFF[i] < macdDEA[i]:
+                death_cross = {'id':i,
+                              'name':'death_cross',
+                              'dif':macdDIFF[i],
+                              'dea':macdDEA[i]}
+                cross_list.append(death_cross)
+
+        df = pd.DataFrame(cross_list, columns=['id', 'name', 'dif', 'dea']).sort_values(by="id",ascending=False)
+        index_list = []
+        if len(df.index) > 4:
+            index_list = df.index[0:4] 
+        else:
+            return False
+        #result1 = df.loc[index_list[0]]['name']=='gold_cross' and df.loc[index_list[0]]['dif'] < 0
+        result1 = df.loc[index_list[0]]['name']=='death_cross' and df.loc[index_list[0]]['dif'] < 0
+        result2= df.loc[index_list[1]]['name']=='gold_cross' and df.loc[index_list[1]]['dif'] < 0
+        result3 = df.loc[index_list[2]]['name']=='death_cross'             
+        result4 = df.loc[index_list[0]]['dea']>df.loc[index_list[1]]['dea']    
+       
+        if result1 and result2 and result3 and result4:
+            return True
+        else:
+            return False
+    else:
+        return False    
+        
+# 判断是否是0下二金叉
+def is_gold_cross(macd_list):
+    macdDIFF, macdDEA, macd = macd_list
+    
+    cross_list = []
+    # 判断当前是否发生金叉，并且位置在0轴之下
+    if macdDIFF[-2] < macdDEA[-2] and macdDIFF[-1] > macdDEA[-1] and macdDIFF[-1] < 0:
+        for i in range(4, len(macd)):
+            if macd[i-3]<macd[i-2]<macd[i-1]<macd[i] and macdDIFF[i-1] < macdDEA[i-1] and macdDIFF[i] > macdDEA[i]:
+                gold_cross = {'id':i,
+                              'name':'gold_cross',
+                              'dif':macdDIFF[i],
+                              'dea':macdDEA[i]}
+                cross_list.append(gold_cross)
+                
+            elif macd[i-3]>macd[i-2]>macd[i-1]>macd[i] and macdDIFF[i-1] > macdDEA[i-1] and macdDIFF[i] < macdDEA[i]:
+                death_cross = {'id':i,
+                              'name':'death_cross',
+                              'dif':macdDIFF[i],
+                              'dea':macdDEA[i]}
+                cross_list.append(death_cross)
+
+        df = pd.DataFrame(cross_list, columns=['id', 'name', 'dif', 'dea']).sort_values(by="id",ascending=False)
+        index_list = []
+        if len(df.index) > 4:
+            index_list = df.index[0:4] 
+        else:
+            return False
+            
+        result1 = df.loc[index_list[0]]['name']=='gold_cross' and df.loc[index_list[0]]['dif'] < 0
+        result2 = df.loc[index_list[1]]['name']=='death_cross' and df.loc[index_list[1]]['dif'] < 0
+        result3= df.loc[index_list[2]]['name']=='gold_cross' and df.loc[index_list[2]]['dif'] < 0
+        result4 = df.loc[index_list[3]]['name']=='death_cross' and df.loc[index_list[3]]['dif'] > 0                                            
+        result5 = df.loc[index_list[0]]['dea']>df.loc[index_list[2]]['dea']
+        if result1 and result2 and result3 and result4 and result5:
+            return True
+        else:
+            return False
+    else:
+        return False

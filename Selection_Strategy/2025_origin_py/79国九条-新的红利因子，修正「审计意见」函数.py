@@ -374,4 +374,113 @@ def bonus_filter(context,stock_list):
                 finance.STK_XR_XD.bonus_type=='年度分红' ,
                 finance.STK_XR_XD.implementation_pub_date<=end_date,
                 finance.STK_XR_XD.board_plan_bonusnote=='不分配不转增',
-                finance.STK_XR_XD.code.in_(stock_list
+                finance.STK_XR_XD.code.in_(stock_list))
+    
+        no_year_bonus = finance.run_query(q)
+        no_year_bonus_list=no_year_bonus['code'].unique().tolist()
+        #排除今年不分红的股票
+        bonus_list=[code for code in stock_list if code not in no_year_bonus_list]
+        bonus_list=short_by_market_cap(context,bonus_list)
+       
+    print(f'进行实际红利筛选后,原有{len(stock_list)}只股票，筛选后剩余{len(bonus_list)}只股票')
+    
+    if len(bonus_list)< g.stock_num:
+        bonus_list.extend([x for x in short_by_market_cap(context,stock_list) if x not in bonus_list ][:g.stock_num-len(bonus_list)])
+    return bonus_list
+
+
+#3-1 交易模块-自定义下单
+def order_target_value_(security, value):
+    if value == 0:
+        pass
+        #log.debug("Selling out %s" % (security))
+    else:
+        log.debug("Order %s to value %f" % (security, value))
+    return order_target_value(security, value)
+
+#3-2 交易模块-开仓
+def open_position(security, value):
+    order = order_target_value_(security, value)
+    if order != None and order.filled > 0:
+        return True
+    return False
+
+#3-3 交易模块-平仓
+def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+
+#3-4 买入模块
+def buy_security(context,target_list):
+    #调仓买入
+    position_count = len(context.portfolio.positions)
+    target_num = len(target_list)
+    if target_num > position_count:
+        value = context.portfolio.cash / (target_num - position_count)
+        for stock in target_list:
+            if context.portfolio.positions[stock].total_amount == 0:
+            #if stock not in context.portfolio.positions:
+                if open_position(stock, value):
+                    log.info("买入[%s]（%s元）" % (stock,value))
+                    if len(context.portfolio.positions) == target_num:
+                        break
+
+
+#4-1 判断今天是否跳过月份
+def today_is_between(context):
+    # 根据g.pass_month跳过指定月份
+    today = context.current_dt
+    month = today.month
+    if month in g.pass_months:
+        return False
+    else:
+        return True
+
+
+#4-2 清仓后次日资金可转
+def close_account(context):
+    if g.trading_signal == False:
+        if len(g.hold_list) != 0 and g.hold_list != [g.etf]:
+            for stock in g.hold_list:
+                position = context.portfolio.positions[stock]
+                close_position(position)
+                log.info("卖出[%s]" % (stock))
+                
+
+
+
+#5  公共模块
+#5-1   根据市值排序
+def short_by_market_cap(context,stock_list):
+    short_q = query(
+            valuation.code,
+            valuation.market_cap,  # 总市值 circulating_market_cap/market_cap
+        ).filter(
+            valuation.code.in_(stock_list),
+            valuation.day == context.previous_date,
+        ).order_by(valuation.market_cap.asc())
+    short_df=get_fundamentals(short_q)
+    short_list=short_df['code'].unique().tolist()
+
+    return  short_list
+
+
+def print_position_info(context):
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

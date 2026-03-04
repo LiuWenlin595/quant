@@ -207,4 +207,159 @@ class F13_Score(Factor):
         'total_assets_1', 'total_assets_4', 'total_assets_5',
         'operating_revenue', 'operating_revenue_4','pb_ratio',
         'total_current_assets','total_current_assets_1','total_current_assets_4','total_current_assets_5',
-        'total_non_current_assets', 'total_non
+        'total_non_current_assets', 'total_non_current_liability',
+        'total_non_current_assets_4', 'total_non_current_liability_4',
+        'total_current_assets', 'total_current_liability',
+        'total_current_assets_4', 'total_current_liability_4',
+        'gross_profit_margin', 'gross_profit_margin_4', 'paidin_capital',
+        'paidin_capital_4','roe', 'roe_4','total_profit','total_profit_4','financial_expense','financial_expense_4']
+    
+    def calc(self,data:dict)->None:
+        
+        roe: pd.DataFrame = data['roe']
+        
+        roa1: pd.DataFrame = data['roa'] # 单位为百分号
+        
+        # 息税前利润（EBIT）除以资产总值
+        # 利息支出项大多数情况时缺失的所以这里用财务费用代替
+        roa2 = data['total_profit'] + data['financial_expense'] / (
+            data['total_current_assets'] +
+            data['total_current_assets_1']).mean()
+        
+        roa2_4 = data['total_profit_4'] + data['financial_expense_4'] / (
+            data['total_current_assets_4'] +
+            data['total_current_assets_5']).mean()
+        
+        delta_roa2 = roa2 / roa2_4 - 1
+        
+        cfo: pd.DataFrame = data['net_operate_cash_flow'] / \
+            data['total_assets']
+
+        delta_roa1: pd.DataFrame = roa1 / data['roa_4'] - 1
+        
+        delta_roe: pd.DataFrame = roe / data['roe_4'] - 1
+            
+        accrual: pd.DataFrame = cfo - roa1 * 0.01
+
+        # 杠杆变化
+        ## 变化为负数时为1，否则为0 取相反
+        leveler: pd.DataFrame = data['total_non_current_liability'] / \
+            data['total_non_current_assets']
+
+        leveler1: pd.DataFrame = data['total_non_current_liability_4'] / \
+            data['total_non_current_assets_4']
+
+        delta_leveler: pd.DataFrame = -(leveler / leveler1 - 1)
+
+        # 流动性变化
+        liquid: pd.DataFrame = data['total_current_assets'] / \
+            data['total_current_liability']
+
+        liquid_1: pd.DataFrame = data['total_current_assets_4'] / \
+            data['total_current_liability_4']
+
+        delta_liquid: pd.DataFrame = liquid / liquid_1 - 1
+
+        # 毛利率变化
+        delta_margin: pd.DataFrame = data['gross_profit_margin'] / \
+            data['gross_profit_margin_4'] - 1
+
+        # 是否发行普通股权
+        eq_offser: pd.DataFrame = data['paidin_capital'] / data[
+            'paidin_capital_4'] - 1
+        
+        # 流动资产周转率
+        caturn_1 = data['operating_revenue'] / (
+            data['total_current_assets'] +
+            data['total_current_assets_1']).mean()
+        caturn_2 = data['operating_revenue_4'] / (
+            data['total_current_assets_4'] +
+            data['total_current_assets_5']).mean()
+        
+        # 流动资产周转率同比
+        delata_caturn = caturn_1 / caturn_2 - 1
+        
+        # 总资产周转率
+        total_asset_turnover_rate: pd.DataFrame = data[
+            'operating_revenue'] / (data['total_assets'] +
+                                          data['total_assets_1']).mean()
+
+        total_asset_turnover_rate_1: pd.DataFrame = data[
+            'operating_revenue_4'] / (data['total_assets_4'] +
+                                            data['total_assets_5']).mean()
+
+        # 总资产周转率同比
+        delta_turn: pd.DataFrame = total_asset_turnover_rate / \
+            total_asset_turnover_rate_1 - 1
+        
+        indicator_tuple: Tuple = (roe, delta_roe,roa1,delta_roa1,roa2,delta_roa2, accrual, delta_leveler,
+                                  delta_liquid, delta_margin,eq_offser,delata_caturn, delta_turn,data['pb_ratio'])
+
+        # 储存计算FFscore所需原始数据
+        self.basic: pd.DataFrame = pd.concat(indicator_tuple).T.replace([-np.inf,np.inf],np.nan)
+
+        self.basic.columns = [
+            'ROE', 'DELTA_ROE','ROA1','DELTA_ROA1','ROA2','DELTA_ROA2','ACCRUAL', 'DELTA_LEVER', 
+            'DLTA_LIQUID', 'DELTA_MARGIN', 'EQ_OFFSER', 'DELTA_CATURN', 'DELTA_TURN','PB_RATIO']
+            
+        return sign(self.basic[g.sel_fields]).sum(axis=1)
+        
+def prepare_pb_ratio(pb_df:pd.DataFrame,watch_date:dt.date)->pd.Series:
+    '''对pb预处理'''
+    
+    pb_ser = pb_df.set_index('code')['pb_ratio']
+    
+    return (pb_ser.pipe(winsorize_med)
+                  .pipe(standardlize)
+                  .pipe(neutralize,how='sw_l1',date=watch_date))
+        
+def trade(context):
+    
+    bar_time = context.previous_date
+    
+    # 获取股票池
+    stock_pool_func = Filter_Stocks('A', bar_time)
+    stock_pool_func.filter_paused(22, 21)  # 过滤22日停牌超过21日的股票
+    stock_pool_func.filter_st()  # 过滤st
+    stock_pool_func.filter_ipodate(180)  # 过滤次新
+    stock_pool_func.filter_industry(['金融服务I','非银金融I'])
+
+    securities = stock_pool_func.securities  # 股票池
+    
+    # 财务因子
+    f:Dict = calc_factors(securities,[F13_Score()],start_date=bar_time,end_date=bar_time)
+    f:pd.Series = f['F13_Score'].iloc[-1].sort_values(ascending=False)
+    
+    # 高分组合
+    score:List = f[f > 4].index.tolist()[:200]
+   
+    # pb因子
+    pb:pd.DataFrame = get_valuation(securities,
+                        end_date=bar_time,
+                        fields=['pb_ratio'],
+                        count=1)
+    
+    # 过滤负值
+    pb = pb.query('pb_ratio > 0')
+    pb:pd.Series = prepare_pb_ratio(pb,bar_time)
+    
+    t: float = pb.quantile(0.2)  # 20%分位数
+  
+    low_pb: List = pb[pb <= t].sort_values().index.tolist()[:200]
+    
+    target: List = list(set(score).intersection(low_pb))
+    
+    
+    for hold in context.portfolio.long_positions:
+        
+        if hold not in target:
+            
+            order_target(hold,0)
+    
+    everStock = context.portfolio.total_value / len(target)
+    
+    for b in target:
+        
+        order_target_value(b,everStock)
+                    
+    record(持仓=len(context.portfolio.long_positions),目标=len(target))

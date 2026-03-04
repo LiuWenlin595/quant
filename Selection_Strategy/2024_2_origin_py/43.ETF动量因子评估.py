@@ -108,7 +108,6 @@ rets_date = []
 for i in [1,5,10,20,30,60,90]:
     rets_date.append(cdata.shift(-i)/cdata)
 
-
 slps_date = pd.concat([slps_date[i] for i in range(len(slps_date))],axis=1)
 rets_date = pd.concat([rets_date[i] for i in range(len(rets_date))],axis=1)
 
@@ -150,7 +149,6 @@ for date in dates[:]:
     rts = rets_date.loc[date,:].loc[code]
     test.append([slp]+list(rts))
 
-
 pd.DataFrame(test).corr().iloc[:1,1:]
 
 
@@ -170,7 +168,6 @@ plot_acf(slp_20.iloc[:,3],lags=20,ax=ax,label='159915')
 plt.plot([0.5]*21)
 plt.legend()
 plt.grid()
-
 
 ## 画出每日筛选出最强动量后的因子自相关函数
 fig, ax = plt.subplots(figsize=(15,8))

@@ -7,7 +7,7 @@ from jqdata import *
 from jqlib.technical_analysis import *
 help_stock = []
 # 初始化函数，设定基准等等
-#需要注意的点，1.最高点前不能连续涨停 2.最高点要高过前面一年
+# 需要注意的点，1.最高点前不能连续涨停 2.最高点要高过前面一年
 def initialize(context):
     # 设定沪深300作为基准
     set_benchmark('000300.XSHG')
@@ -213,4 +213,158 @@ def pick_high_limit(stocks,trade_date,end_date,yes_date_two,yes_date_10,yes_date
 
             df_panel_6 = get_price(stock, count = 6,end_date=end_date, frequency='daily', fields=['open', 'close','high_limit','money'])
             sum_plus_num_6= (df_panel_6.loc[:,'close'] > df_panel_6.loc[:,'open']).sum()
-            sum_open_num_6= (df_panel_6.loc[:,'open'] == df_panel_6.loc
+            sum_open_num_6= (df_panel_6.loc[:,'open'] == df_panel_6.loc[:,'high_limit']).sum() 
+            df_min_close_30 = df_panel_6["close"].min()
+
+            df_panel_30 = get_price(stock, count = 30,end_date=yes_date_two, frequency='daily', fields=['high','open', 'close','high_limit','low'])
+            time_high = df_panel_30['high'].idxmax()
+            df_max_high_30 = df_panel_30["high"].max()
+            df_max_close_30 = df_panel_30["close"].max()
+            df_min_low_30 = df_panel_30["low"].min()
+            sum_plus_num_30= (df_panel_30.loc[:,'close'] <= df_panel_30.loc[:,'open'] * 0.85).sum()
+            if str(time_high) == 'nan':
+                continue
+            time_high_date = time_high.strftime("%Y-%m-%d")
+            yes_date_ten = yes_date_10.strftime("%Y-%m-%d")
+            rate_30 = (df_max_high_30 - df_min_low_30) / df_min_low_30
+            
+            pre_date_high =  (time_high + timedelta(days = -1)).strftime("%Y-%m-%d")
+            df_panel_high = get_price(stock, start_date=pre_date_high, end_date=end_date, frequency='daily', fields=['high','open', 'close','high_limit','low'])
+            sum_plus_num_high= (df_panel_high.loc[:,'close'] <= df_panel_high.loc[:,'open'] * 0.85).sum()
+            
+            df_panel_5 = get_price(stock, count = 6,end_date=time_high, frequency='daily', fields=['open', 'close','high_limit','money'])
+            sum_open_num_5= (df_panel_5.loc[:,'close'] == df_panel_5.loc[:,'high_limit']).sum() 
+            
+            df_panel_12 = get_price(stock, count = 12,end_date=time_high, frequency='daily', fields=['open', 'close','high_limit','money'])
+            sum_open_num_12= (df_panel_12.loc[:,'close'] == df_panel_12.loc[:,'high_limit']).sum() 
+            
+            rate_valley = (df_max_close_30 - df_min_close_30) / df_min_close_30
+            
+            yes_date_25 = trade_date[trade_date.size-25]
+            df_panel_25 = get_price(stock, count = 25,end_date=yes_date_25, frequency='daily', fields=['high','open', 'close','high_limit','low'])
+            sum_open_num_25= (df_panel_25.loc[:,'close'] == df_panel_25.loc[:,'high_limit']).sum() 
+            if stock == '600218.XSHG':
+                print(yes_date_two)
+                print("sum_plus_num_3="+str(sum_plus_num_3))
+                print("sum_plus_num_6="+str(sum_plus_num_6))
+                print("rate_30="+str(rate_30))
+                print("rate_valley="+str(rate_valley))
+                print(time_high_date)
+                print(yes_date_ten) 
+                print(sum_plus_num_high) 
+                print(sum_open_num_6) 
+            if sum_plus_num_3 == 3 and sum_plus_num_6 == 3 and time_high_date >= yes_date_ten and rate_30 > 1 and rate_30 < 2.5 and rate_valley > 0.15 and rate_valley < 0.4:
+                df_panel_500 = get_price(stock, count = 380,end_date=yes_date_30, frequency='daily', fields=['high','open', 'close','high_limit','low'])
+                df_max_high_500 = df_panel_500["high"].max()
+                if stock == '600218.XSHG':
+                    print(df_max_high_30)
+                    print("df_max_high_500="+str(df_max_high_500)) 
+                    print("df_min_close_30="+str(df_min_close_30))
+                    print("sum_plus_num_high="+str(sum_plus_num_high))
+                    print("sum_open_num_6="+str(sum_open_num_6))
+                    print("sum_open_num_5="+str(sum_open_num_5))
+                if df_max_high_30 > df_max_high_500 and sum_open_num_25 < 5 and df_min_close_30 < df_max_high_30 and sum_plus_num_high == 0 and sum_open_num_6 == 0 and sum_open_num_5 < 5 and sum_open_num_5 >= 2:
+                    high_limit_stock.append(stock)
+                elif df_max_high_30 > df_max_high_500 and sum_open_num_25 < 5 and df_min_close_30 < df_max_high_30 and sum_plus_num_high == 0 and sum_open_num_6 == 0 and sum_open_num_12 < 10 and sum_open_num_12 >= 7:
+                    high_limit_stock.append(stock)
+    return high_limit_stock
+    
+#查询最近最高点的位置，之前是不是连续涨
+def high_continous(stock,trade_date,date_now,context):
+    df_panel_60 = get_price(stock, count = 60,end_date=date_now, frequency='daily', fields=['open', 'high', 'close','low', 'high_limit','money'])
+    df_max_high_60 = df_panel_60["high"].max()
+    df_min_low_60 = df_panel_60["low"].min()
+    
+    rate_60 = (df_max_high_60 - df_min_low_60) / df_min_low_60
+    
+    df_panel = get_price(stock, count = 30,end_date=date_now, frequency='daily', fields=['open', 'high', 'close','low', 'high_limit','money'])
+    time_high = df_panel['high'].idxmax()
+    df_max_high_30 = df_panel["high"].max()
+    df_min_low_30 = df_panel["low"].min()
+    #最大值和最小值的差
+    rate_30 = (df_max_high_30 - df_min_low_30) / df_min_low_30
+    # print("stock="+stock)
+    # print(time_high)
+    
+    pre_date =  (time_high + timedelta(days = -1)).strftime("%Y-%m-%d")#'2021-01-15'#datetime.datetime.now()
+    df_panel_eight = get_price(stock, count = 10,end_date=pre_date, frequency='daily', fields=['open', 'high', 'close','low', 'high_limit','money','pre_close'])
+    #查询涨停板有没有四个
+    sum_plus_two = df_panel_eight.loc[:,'high'] - df_panel_eight.loc[:,'high_limit']
+    sum_plus_num_two= (df_panel_eight.loc[:,'high'] == df_panel_eight.loc[:,'high_limit']).sum()
+    sum_plus_num_limit= (df_panel_eight.loc[:,'close'] > df_panel_eight.loc[:,'pre_close'] * 1.095).sum()
+    df_max_high = df_panel_eight["high"].max()
+    df_min_low = df_panel_eight["low"].min()
+    
+    df_panel_six = get_price(stock, count = 6,end_date=pre_date, frequency='daily', fields=['open', 'high', 'close','low', 'high_limit','money','pre_close'])
+    sum_plus_num_six= (df_panel_six.loc[:,'high'] == df_panel_six.loc[:,'high_limit']).sum()
+    
+    yes_date_two = trade_date[trade_date.size-2]
+    df_panel_two = get_price(stock, count = 3,end_date=yes_date_two, frequency='daily', fields=['open', 'high', 'close','low', 'high_limit','money','pre_close'])
+    abs_sum_two = (df_panel_two.loc[:,'close'] - df_panel_two.loc[:,'open']).abs() / df_panel_two.loc[:,'open']
+    abs_sum_num = (abs_sum_two < 0.03).sum()
+    df_min_low_two = df_panel_two['close'].iloc[1]
+    
+    rate_date = (df_max_high_30 - df_min_low_two) / df_min_low_two
+    #因为这个在2020-12-07没买老白干
+    rate_up = (df_max_high - df_min_low) / df_min_low
+    
+    sum_down= (df_panel_eight.loc[:,'close'] < df_panel_eight.loc[:,'open']).sum()
+    # print("sum_plus_num_two="+str(sum_plus_num_two))
+    # print(sum_down)
+    # if stock == '002612.XSHE':
+    #         print(pre_date)
+    #         print(sum_plus_num_two)
+    #         print(sum_plus_num_six)
+    #         print(rate_up)
+    if sum_plus_num_two >= 5 and rate_30 > 0.46 and rate_60 < 2.5 and rate_date > 0.25 and rate_date < 0.32:
+        bool_valley = check_first_valley(trade_date,stock)
+        if bool_valley != False:
+            return True
+
+#查看它是不是第一波山谷
+
+def check_first_valley(trade_date,stock):
+    int_count = 1
+    print("-----------")
+    print(trade_date.size)
+    for stock_day in trade_date:
+        day_now = trade_date[trade_date.size-int_count-12]
+        day_over = trade_date[trade_date.size-int_count - 18]
+        df_panel_5 = get_price(stock, count = 5,end_date=day_now, frequency='daily', fields=['open', 'close','high_limit','money'])
+        df_close_mean_5 = df_panel_5['close'].mean()
+        df_panel_5_over = get_price(stock, count = 5,end_date=day_over, frequency='daily', fields=['open', 'close','high_limit','money'])
+        df_close_mean_5_over = df_panel_5_over['close'].mean()
+        
+        df_panel_20 = get_price(stock, count = 20,end_date=day_now, frequency='daily', fields=['open', 'close','high_limit','money'])
+        df_close_mean_20 = df_panel_20['close'].mean()
+        df_panel_20_over = get_price(stock, count = 20,end_date=day_over, frequency='daily', fields=['open', 'close','high_limit','money'])
+        df_close_mean_20_over = df_panel_20_over['close'].mean()
+        int_count = int_count + 1
+        if df_close_mean_5 < df_close_mean_5_over * 1.05 and df_close_mean_20 > df_close_mean_20_over * 1.2:
+            print(str(day_now)+"----hahahah----"+str(stock))
+            return False
+        if int_count > 20:
+            return True
+        
+
+
+    
+##过滤上市时间不满1080天的股票
+def filter_stock_by_days(context, stock_list, days):
+    tmpList = []
+    for stock in stock_list :
+        days_public=(context.current_dt.date() - get_security_info(stock).start_date).days
+        if days_public > days:
+            tmpList.append(stock)
+    return tmpList
+
+##去除st的股票
+def filter_st(codelist):
+    current_data = get_current_data()
+    codelist = [code for code in codelist if not current_data[code].is_st]
+    return codelist
+
+def filter_paused_stock(stock_list):
+    current_data = get_current_data()
+    stock_list = [stock for stock in stock_list if not current_data[stock].paused]
+    return stock_list

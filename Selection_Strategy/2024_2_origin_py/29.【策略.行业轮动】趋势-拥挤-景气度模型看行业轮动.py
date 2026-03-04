@@ -89,7 +89,6 @@ conn.close()
 
 
 # ## 通用计算
-# 
 
 ## 构建运算大表
 p_chg = pd.merge(p_chg,val,how='left',on=['code','day'])
@@ -216,3 +215,78 @@ print(df_ind_crowd.sort_values(by='crowdedness',ascending=False).head(3))
 # 对于各行业，三者取行业各股中位数（防止亏损、盈利大幅波动带来的影响）
 
 df_g_ix = df_stk_pool[['code','trade_date','sw_l1_name','sales_G_ttm','profit_G_ttm','ocf_G_ttm','roe_G_ttm']]
+ind_list = list(set(df_g_ix['sw_l1_name']))
+df_ind_boom = pd.DataFrame()
+for ind_ in ind_list:
+    df_ind = df_g_ix.loc[df_g_ix['sw_l1_name']==ind_]
+    median_tmp = df_ind.quantile(0.5)
+    boom_ = (median_tmp['sales_G_ttm']+median_tmp['profit_G_ttm']+median_tmp['ocf_G_ttm']+median_tmp['roe_G_ttm'])/4
+    df_ind_boom = df_ind_boom.append({'ind_name':ind_,
+                                      'sales_G_ttm':median_tmp['sales_G_ttm'],'profit_G_ttm':median_tmp['profit_G_ttm'],
+                                      'ocf_G_ttm':median_tmp['ocf_G_ttm'],'roe_G_ttm':median_tmp['roe_G_ttm'],
+                                      'boom':boom_},
+                                     ignore_index=True)
+print(df_ind_boom.sort_values(by='boom',ascending=False).head(3))
+
+
+# ## 合并数据、储存、绘图
+
+# 合并数据并储存
+df_mgd = df_ind_mom.copy()
+df_mgd = pd.merge(df_mgd, df_ind_crowd, how='left', on='ind_name')
+df_mgd = pd.merge(df_mgd, df_ind_boom, how='left', on='ind_name')
+df_mgd['trade_date'] = [info_dt_m1]*len(df_mgd)
+df_mgd.to_excel('industry_3d_alys_{info_dt_m1}.xlsx'.format(info_dt_m1=info_dt_m1),index=False)
+print(df_mgd.head(3))
+
+
+# 绘图
+df_mgd = pd.read_excel('industry_3d_alys_{info_dt_m1}.xlsx'.format(info_dt_m1=info_dt_m1))
+df_plot = df_mgd[['ind_name','IR_ind','crowdedness','boom']]
+df_plot['IR_ind'] = (df_plot['IR_ind']-df_plot['IR_ind'].mean())/df_plot['IR_ind'].std()
+df_plot['crowdedness'] = (df_plot['crowdedness']-df_plot['crowdedness'].mean())/df_plot['crowdedness'].std()
+df_plot['boom'] = (df_plot['boom']-df_plot['boom'].mean())/df_plot['boom'].std()/20
+df_plot['tol'] = 0.51*df_plot['IR_ind'] - 0.23*df_plot['crowdedness'] + 1.13*df_plot['boom']
+print(df_plot.sort_values(by=['tol'],ascending=False).head(3))
+
+
+from pyecharts import options as opts
+from pyecharts.charts import Scatter
+from pyecharts.commons.utils import JsCode
+
+c = (
+    Scatter(init_opts=opts.InitOpts(
+            width="1000px",
+            height="900px",
+            animation_opts=opts.AnimationOpts(animation=False),
+            bg_color='white')
+           )
+    .add_xaxis(df_plot['IR_ind'])
+    .add_yaxis("景气度(大小)    综合得分(颜色)",
+               [list(z) for z in zip(df_plot['crowdedness'], df_plot['boom'], df_plot['tol'], df_plot['ind_name'])],
+               label_opts=opts.LabelOpts(
+                   formatter=JsCode(
+                       "function(params){return params.value[4];}"
+                   )
+               ),
+              )
+    .set_global_opts(
+        title_opts=opts.TitleOpts(title="行业趋势-拥挤-景气模型"),
+        visualmap_opts=[opts.VisualMapOpts(type_="size",
+                                           pos_top = 50,
+                                           max_=df_plot['boom'].max(), min_=df_plot['boom'].min(),
+                                           dimension=2),
+                        opts.VisualMapOpts(type_="color",
+                                           pos_bottom = 50,
+                                           max_=df_plot['tol'].max(), min_=df_plot['tol'].min(),
+                                           dimension=3)
+                       ],
+        yaxis_opts=opts.AxisOpts(name="拥挤度",splitline_opts=opts.SplitLineOpts(is_show=True)),
+        xaxis_opts=opts.AxisOpts(name="趋势度",splitline_opts=opts.SplitLineOpts(is_show=True)),
+    )
+)
+c.render("scatter_trend_crowded_boom.html")
+make_snapshot(snapshot,c.render('scatter_trend_crowded_boom.HTML'),
+              'scatter_trend_crowded_boom.jpeg',is_remove_html=True)
+# jupyter展示
+c.render_notebook()

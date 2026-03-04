@@ -45,7 +45,9 @@ def initialize(context):
 
 
 
-# ========================主函数-盘中交易部分=======================================================
+"""
+========================主函数-盘中交易部分=======================================================
+"""
 
 
 #4-5 交易模块-择时交易
@@ -77,7 +79,9 @@ def my_trade(context):
     adjust_position(context, check_out_list)                            #调用4-4调仓模块
 
 
-# ========================主函数-择时卖出止损模块=======================================================
+"""
+========================主函数-择时卖出止损模块=======================================================
+"""
 def zheshi_trade(context):
     #每天都运行
     #对每支持仓股票进行审视
@@ -102,7 +106,9 @@ def zheshi_trade(context):
 
 
 
-# ========================主函数-尾盘打印持仓信息=======================================================
+"""
+========================主函数-尾盘打印持仓信息=======================================================
+"""
 
 #5-1 复盘模块-打印
 #打印每日持仓信息
@@ -129,7 +135,9 @@ def print_trade_info(context):
     print('———————————————————————————————————————分割线————————————————————————————————————————')
     
 #
-# ========================所有需要调用的核心函数=======================================================
+"""
+========================所有需要调用的核心函数=======================================================
+"""
 
 #2-1 选股模块
 def get_factor_filter_list(context,stock_list,jqfactor,sort,p1,p2):
@@ -233,7 +241,9 @@ def get_stock_list(context):
 
 
 
-# ========================函数2-2调用的筛选st，退市，科创板的股票=======================================================
+"""
+========================函数2-2调用的筛选st，退市，科创板的股票=======================================================
+"""
 
 
 #3-1 过滤模块-过滤停牌股票
@@ -250,4 +260,98 @@ def filter_st_stock(stock_list):
 			if not current_data[stock].is_st
 			and 'ST' not in current_data[stock].name
 			and '*' not in current_data[stock].name
-			and '退' not in current_data[
+			and '退' not in current_data[stock].name]
+
+#3-3 过滤模块-过滤涨停的股票
+#输入选股列表，返回剔除未持有且已涨停股票后的列表
+def filter_limitup_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	# 已存在于持仓的股票即使涨停也不过滤，避免此股票再次可买，但因被过滤而导致选择别的股票
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < current_data[stock].high_limit]
+
+#3-4 过滤模块-过滤跌停的股票
+#输入股票列表，返回剔除已跌停股票后的列表
+def filter_limitdown_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] > current_data[stock].low_limit]
+
+#3-5 过滤模块-过滤科创板
+#输入股票列表，返回剔除科创板后的列表
+def filter_kcb_stock(context, stock_list):
+    return [stock for stock in stock_list  if stock[0:3] != '688']
+
+#3-6 过滤次新股
+#输入股票列表，返回剔除上市日期不足250日股票后的列表
+def filter_new_stock(context,stock_list):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=250)]
+
+
+"""
+========================函数4-4调仓模块，=======================================================
+"""
+#4-4 交易模块-调仓
+#当择时信号为买入时开始调仓，输入过滤模块处理后的股票列表，执行交易模块中的开平仓操作
+def adjust_position(context, buy_stocks):
+    #如果在持仓列表里，但是不在买入列表里，则平仓
+	for stock in context.portfolio.positions:
+		if stock not in buy_stocks:
+			log.info("[%s]已不在应买入列表中" % (stock))
+			position = context.portfolio.positions[stock]
+			close_position(position)
+		#如果在买入列表，则不清仓
+		else:
+			log.info("[%s]已经持有无需重复买入" % (stock))
+	
+	
+	# 根据股票数量分仓
+	# 此处只根据可用金额平均分配购买，不能保证每个仓位平均分配
+	position_count = len(context.portfolio.positions)
+	#如果仓位有剩余，开仓
+	if g.stock_num > position_count:
+		value = context.portfolio.cash / (g.stock_num - position_count)
+		for stock in buy_stocks:
+			if context.portfolio.positions[stock].total_amount == 0:
+				if open_position(stock, value):
+					if len(context.portfolio.positions) == g.stock_num:
+						break
+"""
+========================函数4的副函数，调用买入卖出，报单======================================================
+"""
+
+
+
+
+#4-1 交易模块-自定义下单
+#报单成功返回报单(不代表一定会成交),否则返回None,应用于
+def order_target_value_(security, value):
+	if value == 0:
+		log.debug("Selling out %s" % (security))
+	else:
+		log.debug("Order %s to value %f" % (security, value))
+	# 如果股票停牌，创建报单会失败，order_target_value 返回None
+	# 如果股票涨跌停，创建报单会成功，order_target_value 返回Order，但是报单会取消
+	# 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
+	return order_target_value(security, value)
+
+#4-2 交易模块-开仓
+#买入指定价值的证券,报单成功并成交(包括全部成交或部分成交,此时成交量大于0)返回True,报单失败或者报单成功但被取消(此时成交量等于0),返回False
+def open_position(security, value):
+	order = order_target_value_(security, value)
+	if order != None and order.filled > 0:
+		return True
+	return False
+
+#4-3 交易模块-平仓
+#卖出指定持仓,报单成功并全部成交返回True，报单失败或者报单成功但被取消(此时成交量等于0),或者报单非全部成交,返回False
+def close_position(position):
+	security = position.security
+	order = order_target_value_(security, 0)  # 可能会因停牌失败
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+			return True
+	return False

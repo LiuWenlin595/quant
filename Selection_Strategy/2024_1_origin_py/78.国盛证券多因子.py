@@ -193,4 +193,62 @@ def get_comb_factor(current_dt):
                 v_score_df = data_df[v].dropna().sort_values(ascending=is_asc)
                 v_stocks = v_score_df.index[:len(v_score_df)//10] # 10%排名的stocks
                 data_df.loc[v_stocks, k] += 1
-            final_df[k] = data_df[
+            final_df[k] = data_df[k]/len(fac_dict[k])
+    score_df = final_df.sum(axis=1).sort_values(ascending=False)
+    return score_df
+    
+## 开盘时运行函数
+def market_open(context):
+    log.info('函数运行时间(market_open):'+str(context.current_dt.time()))
+    
+    hold_list=list(context.portfolio.positions.keys()) 
+    log.info('g.hold_list:' + str(hold_list))
+    buy_list = g.buy_list
+    log.info('buy_list:'+ str(buy_list)) 
+    
+    for s in hold_list:
+        if s not in buy_list:
+            order_target_value(s, 0)
+    
+    capital_unit = context.portfolio.total_value / len(buy_list)
+    #capital_unit = context.portfolio.available_cash / len(buy_list)
+    log.info('capital_unit:' + str(capital_unit))
+    for s in buy_list:
+        order_target_value(s, capital_unit)
+
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    #得到当天所有成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        log.info('成交记录：'+str(_trade))
+    log.info('一天结束')
+    log.info('##############################################################')
+
+# 过滤【次新 + 科创北交 + ST退市 + 停牌】
+def filter_stocks(all_security_df, yesterday, current_dt):
+    all_security_df['index'] = all_security_df.index
+
+    # 过滤次新股
+    filter_fn = lambda t: (yesterday - t) >= datetime.timedelta(days=375)
+    all_security_df = all_security_df[all_security_df['start_date'].apply(filter_fn)]
+
+    # 过滤科创北交
+    filter_fn = lambda t: t[0] != '4' and t[0] != '8' and t[:2] != '68'
+    all_security_df = all_security_df[all_security_df['index'].apply(filter_fn)]
+
+    # 过滤ST及其他具有退市标签的股票
+    st_df = get_extras('is_st', all_security_df.index, start_date=current_dt, end_date=current_dt, df=True).T
+    st_list = st_df[st_df==True].dropna().index
+    filter_fn = lambda t: ("ST" in t or "*" in t or "退" in t)
+    all_security_df = all_security_df[(~all_security_df['index'].isin(st_list)) & (~all_security_df['display_name'].apply(filter_fn))]
+    
+    # 过滤停牌
+    susp_df = get_price(all_security_df.index.tolist(), \
+                        end_date=current_dt, count=1, frequency='daily', \
+                        fields='paused', panel=False)
+    unsusp_stocks = susp_df[susp_df['paused'] < 1]["code"].tolist() # 得到当日未停牌股票代码list:
+    days=7 # 过滤出前7天没有停牌过的Stocks
+    feasible_stocks=[s for s in unsusp_stocks if sum(attribute_history(s, days, unit='1d',fields=('paused'),skip_paused=False))[0]==0]
+    return feasible_stocks

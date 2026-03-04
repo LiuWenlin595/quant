@@ -242,4 +242,169 @@ def market_last(context):
                 if ret > 0 and stockcode not in has_sell :
                     macd = MACD_Direction(stockcode, pre_date)
                     if macd == 2 :
-                        cash1 = context.portfolio.available_
+                        cash1 = context.portfolio.available_cash
+                        buy_stock(context,stockcode,cash1)
+        
+
+                
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    #总结当日持仓情况
+    today_date = context.current_dt.date()
+    
+    for stk in context.portfolio.positions:
+        cost = context.portfolio.positions[stk].avg_cost  # 开仓均价
+        price = context.portfolio.positions[stk].price    #当前行情价格
+        value = context.portfolio.positions[stk].value    #总价值
+        intime= context.portfolio.positions[stk].init_time  #建仓时间
+        ret = price/cost - 1                              #
+        duration=len(get_trade_days(intime,today_date))
+        
+        print('股票(%s)共有:%s,入时:%s,周期:%s,成本:%s,现价:%s,收益:%s' % (stk,value,intime,duration,cost,price,ret))
+        # write_file('score_log.csv', str('股票:%s,共有:%s,入时:%s,周期:%s,成本:%s,现价:%s,收益:%s\n' % (stk,value,intime,duration,cost,price,ret)),append = True)
+        
+    print('总资产:%s,持仓:%s' %(context.portfolio.total_value,context.portfolio.positions_value))
+    # write_file('score_log.csv', str('%s,总资产:%s,持仓:%s\n' %(context.current_dt.date(),context.portfolio.total_value,context.portfolio.positions_value)),append = True)
+
+"""
+---------------------------------函数定义-主要策略-----------------------------------------------
+"""
+
+#取财务基本面的三角合集
+def get_delta_stocks(context,stocklist,today_date):
+    lastd_date = context.previous_date
+    current_data = get_current_data()
+    poollist=[]
+    """
+    #当期报告的静态值
+    df_value = get_fundamentals(query(indicator.code,indicator.roe,indicator.inc_total_revenue_year_on_year,indicator.ocf_to_revenue).filter(indicator.code.in_(stocklist)),lastd_date).dropna()
+    roe_list = df_value.sort_values(['roe'],ascending = False).code.values.tolist()[:100]
+    rev_list = df_value.sort_values(['inc_total_revenue_year_on_year'],ascending = False).code.values.tolist()[:100]
+    ocf_list = df_value.sort_values(['ocf_to_revenue'],ascending = False).code.values.tolist()[:100]
+    """
+    #参考海通研报，取当期与前4期均值的对比值
+    #取5期报告数据,默认返回按季度的数据
+    df_f_factors = get_history_fundamentals(stocklist,[indicator.roe,indicator.inc_total_revenue_year_on_year,indicator.ocf_to_revenue]
+    , watch_date=lastd_date, count=5).dropna()  # 连续的5个季度
+    log.info(len(df_f_factors))
+    df_value = df_f_factors[(df_f_factors.roe >0) & (df_f_factors.inc_total_revenue_year_on_year >0) & (df_f_factors.ocf_to_revenue >0)]
+    log.info(len(df_value))
+    
+    #切片，取第二行到末尾的总计和均值
+    def ttm_sum(x):
+        return x.iloc[1:].sum()
+    def ttm_avg(x):
+        return x.iloc[1:].mean()
+    
+    #切片，取第一行到倒数第二行的总计和均值   
+    def pre_ttm_sum(x):
+        return x.iloc[:-1].sum()
+    def pre_ttm_avg(x):
+        return x.iloc[:-1].mean()
+    
+    #取最新值和次新值
+    def val_1(x):
+        return x.iloc[-1]
+    def val_2(x):
+        if len(x.index) > 1:
+            return x.iloc[-2]
+        else:
+            return nan
+            
+    df_delta = pd.DataFrame(columns=['code','roe_chg','rev_chg','ocf_chg'])
+    for stockcode in stocklist:
+        df_temp = df_value[df_value.code == stockcode]
+        if len(df_temp) <5:
+            continue
+        roe_chg = df_temp.roe.values[-1]/df_temp.roe[:-1].mean()
+        rev_chg = df_temp.inc_total_revenue_year_on_year.values[-1]/df_temp.inc_total_revenue_year_on_year[:-1].mean()
+        ocf_chg = df_temp.ocf_to_revenue.values[-1]/df_temp.ocf_to_revenue[:-1].mean()
+        """
+        #取三角交集
+        if roe_chg <1 or rev_chg <1 or ocf_chg <1:
+            continue
+        """
+        df_delta = df_delta.append({'code':stockcode, 'roe_chg':roe_chg, 'rev_chg':rev_chg, 'ocf_chg':ocf_chg}, ignore_index=True)
+    
+    #取各角的前排
+    df_delta = df_delta[df_delta.roe_chg >1]
+    poollist = df_delta.sort_values('roe_chg', ascending = False).code.values.tolist()[0:10]
+    #poollist = df_delta.code.values.tolist()
+        
+
+    return poollist
+"""
+---------------------------------函数定义-macd---------------------------------------------------
+"""
+def MACD_Direction(stockcode,date):
+    macd_diff,macd_dea,macd_macd = MACD(stockcode,date,SHORT=12,LONG=26,MID=9) #(stockcode,date,SHORT=5,LONG=10,MID=5)
+    print("macd：%s,%s,%s"%(macd_diff,macd_dea,macd_macd))
+    D = 0
+    if  macd_diff[stockcode]  < macd_dea[stockcode] and (macd_dea[stockcode]-macd_diff[stockcode]>=0.1) :
+    # if macd_diff[stockcode]  < 0 and macd_diff[stockcode]  < macd_dea[stockcode] :
+        D = 1 #卖出
+    # elif macd_diff[stockcode]  < macd_dea[stockcode] and macd_diff[stockcode] < 0:
+    #     D = 1 #卖出
+    elif macd_diff[stockcode] < 0 and macd_dea[stockcode] < 0 and (macd_dea[stockcode]-macd_diff[stockcode] >= 0):
+        D = 3 #超卖
+    elif macd_diff[stockcode] > 0 and macd_dea[stockcode]  > 0 and macd_diff[stockcode]  > macd_dea[stockcode] :
+        D = 2  #买入
+    return D
+"""
+---------------------------------函数定义-rsi---------------------------------------------------
+"""
+def get_RSRS_signal(context,stockcode):
+    prices = attribute_history(stockcode, 61, '1d', ('close'))  
+    rsi = talib.RSI(prices['close'].values, timeperiod=6)[-1] #6日周期
+    rsi = int(rsi)
+    R = 0
+    if rsi < 25:
+        R = 1 #买入
+    elif rsi > 85: 
+        R = 2 #卖出
+
+
+"""
+
+---------------------------------函数定义-次要过滤-----------------------------------------------
+"""
+
+
+"""
+---------------------------------函数定义-辅助函数-----------------------------------------------
+"""
+##买入函数
+def buy_stock(context,stockcode,cash):
+    current_time = context.current_dt
+    current_data = get_current_data()
+    
+    last_price = current_data[stockcode].last_price
+    high_limit = current_data[stockcode].high_limit
+    if stockcode[0:3] == '688':
+        if last_price == high_limit:
+            if order_target_value(stockcode,cash,LimitOrderStyle(high_limit)) != None: #涨停板挂限价单
+                log.info('%s挂限价单%s' % (current_time,stockcode))
+        else:
+            if order_target_value(stockcode,cash,MarketOrderStyle(1.1*last_price)) != None: #科创板需要设定限值
+                log.info('%s买入%s' % (current_time,stockcode))
+    else:
+        if last_price == high_limit:
+            if order_target_value(stockcode,cash,LimitOrderStyle(high_limit)) != None: #涨停板挂限价单
+                log.info('%s挂限价单%s' % (current_time,stockcode))
+        else:
+            if order_target_value(stockcode, cash) != None:
+                log.info('%s买入%s' % (current_time,stockcode))
+                
+##卖出函数
+def sell_stock(context,stockcode,cash):
+    current_time = context.current_dt
+    current_data = get_current_data()
+    
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(0.9*last_price)) != None: #科创板需要设定限值
+            log.info('%s卖出%s' % (current_time,stockcode))
+    else:
+        if order_target_value(stockcode,cash) != None:
+            log.info('%s卖出%s' % (current_time,stockcode))

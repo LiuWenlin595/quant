@@ -363,4 +363,37 @@ def print_position_info(context):
             #6 独食
             ds = ccd.loc[s]['extreme_count']
             #7 市值
-            sz = get_fundamentals(
+            sz = get_fundamentals(query(valuation.code, valuation.circulating_market_cap).filter(valuation.code==s), date).iloc[0,1]
+            #8 换手
+            hs = HSL([s], date)[0][s]
+            #9 龙头概念
+            try:
+                c = 1 if s in hot_stocks else 0
+            except:
+                c = 0
+            
+            ## 逻辑判断
+            condition = ''
+            if hs? ds? emo?:
+                # 上升周期
+                if cyc? sz?:
+                    condition += '上升周期 '
+                # 资金接力
+                if ds? hs? hs?:
+                    condition += '资金接力 '
+                # 题材初期
+                if c? emo?:
+                    condition += '题材初期(' + str(hot_concept) + ') '
+                # 热点集中
+                if l? r?:
+                    condition += '热点集中 '
+                # 情绪突破
+                if emo?:
+                    condition += '情绪突破 '
+            #获取符合逻辑的列表
+            if len(condition) != 0:
+                condition_dct[s] = get_security_info(s, date).display_name+' —— ' + condition
+        except:
+            pass
+    stock_list = list(condition_dct.keys())
+'''

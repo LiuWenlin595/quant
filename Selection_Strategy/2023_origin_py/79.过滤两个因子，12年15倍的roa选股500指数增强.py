@@ -490,4 +490,57 @@ def jq_factor_filter(context, security_list):
         g.trade_allow = 0
     else:
         # 换手率相对波动率越小越好，排序取正序
-        df = df.sort_values(axis=1,by=pre_date,ascending=True
+        df = df.sort_values(axis=1,by=pre_date,ascending=True)
+        security_list = df.columns.values.tolist()
+        # 保留前80%，丢弃换手率相对波动率最大的20%股票
+        pre_num = len(security_list)
+        target_num = int(pre_num//2)
+        # target_num = int(pre_num*4/5)
+        print(pre_num,target_num)
+        
+        security_list = security_list[0:target_num]
+        print("换手率相对波动率筛选前%d只，筛选后%d只" % (pre_num, len(security_list)))
+        # 正常运行，允许后续交易
+        g.trade_allow = 1
+        
+           
+        factor_data = get_factor_values(security_list, factors=[
+        # #每股营业利润
+        # 'operating_profit_per_share', 
+        # #PEG
+        # 'PEG', 
+        #换手率相对波动率
+        
+        'BIAS10',
+        ], start_date=pre_date, end_date=pre_date)
+        try: 
+            df = factor_data['BIAS10']
+        except:
+            print("！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！")
+            print("获取聚宽因子换手率相对波动率时发生异常，不做筛选直接返回原列表")
+            # 由于错误，不进行今天的交易
+            g.trade_allow = 0
+        else:
+            # 换手率相对波动率越小越好，排序取正序
+            df = df.sort_values(axis=1,by=pre_date,ascending=True)
+            security_list = df.columns.values.tolist()
+            # 保留前80%，丢弃换手率相对波动率最大的20%股票
+            pre_num = len(security_list)
+            target_num = int(pre_num//2)
+            # target_num = int(pre_num*4/5)
+            print(pre_num,target_num)
+            
+            security_list = security_list[0:target_num]
+          
+            print("单日家梁去世筛选前%d只，筛选后%d只" % (pre_num, len(security_list)))
+            # 正常运行，允许后续交易
+            g.trade_allow = 1
+            
+        
+        
+        
+        
+        
+        
+        
+    return security_list

@@ -277,3 +277,47 @@ def open_position(security, value):
 
 #3-3 交易模块-平仓，调仓，止盈，特殊月份卖出用这个函数，止损不是这个
 def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+
+#3-4 买入模块
+def buy_security(context,target_list):
+    #调仓买入
+    position_count = len(context.portfolio.positions)   # 持仓股数量
+    target_num = len(target_list)                       # 目标股数量
+    if target_num > position_count:
+        value = context.portfolio.cash / (target_num - position_count)
+        for stock in target_list:
+            if context.portfolio.positions[stock].total_amount == 0:
+            #if stock not in context.portfolio.positions:
+                if open_position(stock, value):
+                    log.info("买入[%s]（%s元）" % (stock,value))
+                    g.not_buy_again.append(stock)       #持仓清单，后续不希望再买入，每周清空
+                    if len(context.portfolio.positions) == target_num:
+                        break
+
+
+#4-1 判断今天是否为特殊时间段
+def today_is_between(context):
+    today = context.current_dt.strftime('%m-%d')
+    if g.pass_april is True:
+        if (('04-05' <= today) and (today <= '04-30')) or (('01-05' <= today) and (today <= '02-05')):
+            return True
+        else:
+           return False
+    else:
+        return False
+
+
+#4-2 特殊月份清仓
+def close_account(context):
+    if g.no_trading_today_signal == True:
+        if len(g.hold_list) != 0:
+            for stock in g.hold_list:
+                position = context.portfolio.positions[stock]
+                if close_position(position):
+                    log.info("卖出[%s]" % (stock))

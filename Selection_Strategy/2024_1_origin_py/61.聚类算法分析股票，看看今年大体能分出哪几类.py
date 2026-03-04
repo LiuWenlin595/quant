@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# In[66]: (已移除或注释)
+
+
 from jqdata import *
 from jqfactor import *
 import jqdata
@@ -96,6 +99,9 @@ print("最大值:", max_value)
 print("最小值:", min_value)
 
 
+# In[67]: (已移除或注释)
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
@@ -111,6 +117,9 @@ print(embedded_data.shape)
 plt.scatter(embedded_data[:, 0], embedded_data[:, 1], marker='.', alpha=0.5)
 plt.title('t-SNE Visualization')
 plt.show()
+
+
+# In[70]: (已移除或注释)
 
 
 import numpy as np
@@ -158,6 +167,9 @@ plt.legend()
 plt.show()
 
 
+# In[71]: (已移除或注释)
+
+
 # 获取一只股票的名称
 def get_stock_name(code):
     return get_security_info(code).display_name
@@ -186,3 +198,7 @@ df = get_fundamentals(q)
 df['name']=name
 df['industry']=industry
 print(df)
+
+
+
+# In[ ]: (已移除或注释)

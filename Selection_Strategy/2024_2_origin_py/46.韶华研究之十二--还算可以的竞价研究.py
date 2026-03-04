@@ -195,9 +195,7 @@ def after_market_close(context):
     log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
 
 
-"""
----------------------------------函数定义-主要策略-----------------------------------------------
-"""
+# ---------------------------------函数定义-主要策略-----------------------------------------------
 def get_rps_filter(context,stocklist,check_date,duration,ratio):
     poollist=[]
     df_price=get_price(stocklist, count=duration, end_date=check_date, skip_paused=True, panel=False)
@@ -271,4 +269,166 @@ def get_score_filter(context,stocklist):
         score = 0
        
         #均线加分项
-        MA10_last = MA(stockcode,
+        MA10_last = MA(stockcode, check_date=lastd_date, timeperiod=10)
+        MA20_last = MA(stocklist, check_date=lastd_date, timeperiod=20)
+        MA30_last = MA(stocklist, check_date=lastd_date, timeperiod=30)
+       
+        MA10_back = MA(stockcode, check_date=back10_date, timeperiod=10)
+        MA20_back = MA(stocklist, check_date=back10_date, timeperiod=20)
+        MA30_back = MA(stocklist, check_date=back10_date, timeperiod=30)
+       
+        if (MA10_back[stockcode]/MA20_back[stockcode] < MA10_last[stockcode]/MA20_last[stockcode]) and (MA10_back[stockcode]/MA20_back[stockcode] >1
+        ) and (MA20_back[stockcode]/MA30_back[stockcode] < MA20_last[stockcode]/MA30_last[stockcode]) and (MA20_back[stockcode]/MA30_back[stockcode] >1):
+            score +=10
+        elif ((MA10_back[stockcode]/MA20_back[stockcode] < MA10_last[stockcode]/MA20_last[stockcode]) and (MA10_back[stockcode]/MA20_back[stockcode] >1
+        )) or ((MA20_back[stockcode]/MA30_back[stockcode] < MA20_last[stockcode]/MA30_last[stockcode]) and (MA20_back[stockcode]/MA30_back[stockcode] >1)):
+            score +=5
+       
+        #跳空加分项
+        df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['pre_close','high_limit','low_limit','high','low','close'],count=60)
+        df_late5 = df_price.iloc[-5:,:]
+        if len(df_late5[df_late5.low > df_late5.pre_close]):
+            score +=10
+        df_late20 = df_price.iloc[-20:-6,:]
+        if len(df_late20[df_late20.low > df_late20.pre_close]):
+            score +=20
+        df_late60 = df_price.iloc[:-21,:]
+        if len(df_late60[df_late60.low > df_late60.pre_close]):
+            score +=30
+           
+        #一字板和跌停扣分项
+        df_d20 = df_price.iloc[-20:,:]
+        if len(df_d20[df_d20.low == df_d20.high_limit]) !=0:
+            score -= 20
+        if len(df_price[df_price.close == df_price.low_limit]) !=0:
+            score -= 20
+       
+        score_sets[stockcode] = score
+   
+    log.info(score_sets)
+    return score_sets
+   
+# ---------------------------------函数定义-次要过滤-----------------------------------------------
+def get_reds_filter(context,stocklist,check_duration,reds_num):
+    # 输出运行时间
+    log.info('函数运行时间(get_reds_filter)：'+str(context.current_dt.time()))
+    #0，预置，今天是D日
+    all_data = get_current_data()
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date  #昨天
+    poollist=[]
+   
+    # 交易日历
+    trd_days = get_trade_days(end_date=lastd_date, count=check_duration)  # array[datetime.date]
+    s_trd_days = pd.Series(range(len(trd_days)), index=trd_days)  # Series[index:交易日期，value:第几个交易日]
+    back_date = trd_days[0]
+
+    start_time = time.time()
+    # 取数
+    df_price = get_price(stocklist,end_date=lastd_date,frequency='1d',fields=['pre_close','open','close','high','high_limit','low_limit','paused']
+    ,skip_paused=False,fq='pre',count=check_duration,panel=False,fill_paused=True)
+   
+    df_reds = df_price[(df_price.close > df_price.pre_close) & (df_price.paused == 0)].set_index('time')
+    # 标注出df_up中的time对应的是第几个交易日(ith)
+    df_reds['ith'] = s_trd_days
+   
+    code_set = set(df_reds.code.values)
+    poollist =[stockcode for stockcode in code_set if ((len(df_reds[df_reds.code ==stockcode]) >= reds_num))]
+   
+    end_time = time.time()
+    log.info('--%d天(%s--%s)%d次以上红K线过滤出%d只标的,构建耗时:%.1f 秒' % (check_duration,back_date,lastd_date,reds_num,len(poollist),end_time-start_time))       
+    #log.info(poollist)
+
+    return poollist
+
+def get_down_filter(context,stocklist,check_duration,down_num):
+    # 输出运行时间
+    log.info('函数运行时间(get_down_filter)：'+str(context.current_dt.time()))
+    #0，预置，今天是D日
+    all_data = get_current_data()
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date  #昨天
+    poollist=[]
+   
+    # 交易日历
+    trd_days = get_trade_days(end_date=lastd_date, count=check_duration)  # array[datetime.date]
+    s_trd_days = pd.Series(range(len(trd_days)), index=trd_days)  # Series[index:交易日期，value:第几个交易日]
+    back_date = trd_days[0]
+
+    start_time = time.time()
+    # 取数
+    df_price = get_price(stocklist,end_date=lastd_date,frequency='1d',fields=['pre_close','open','close','high','high_limit','low_limit','paused']
+    ,skip_paused=False,fq='pre',count=check_duration,panel=False,fill_paused=True)
+
+    df_down = df_price[(df_price.close == df_price.low_limit) & (df_price.paused == 0)].set_index('time')
+    # 标注出df_up中的time对应的是第几个交易日(ith)
+    df_down['ith'] = s_trd_days
+   
+    code_set = set(df_down.code.values)
+    downlist =[stockcode for stockcode in code_set if ((len(df_down[df_down.code ==stockcode]) > down_num))]
+    poollist = list(set(stocklist).difference(set(downlist)))
+   
+    end_time = time.time()
+    log.info('--%d天(%s--%s)%d次以下跌停过滤出%d只标的,构建耗时:%.1f 秒' % (check_duration,back_date,lastd_date,down_num,len(poollist),end_time-start_time))       
+    #log.info(poollist)
+
+    return poollist
+
+def get_up_filter(context,stocklist,check_duration,up_num):
+    # 输出运行时间
+    log.info('函数运行时间(get_up_filter)：'+str(context.current_dt.time()))
+    #0，预置，今天是D日
+    all_data = get_current_data()
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date  #昨天
+    poollist=[]
+   
+    # 交易日历
+    trd_days = get_trade_days(end_date=lastd_date, count=check_duration)  # array[datetime.date]
+    s_trd_days = pd.Series(range(len(trd_days)), index=trd_days)  # Series[index:交易日期，value:第几个交易日]
+    back_date = trd_days[0]
+   
+    start_time = time.time()
+    # 取数
+    df_price = get_price(stocklist,end_date=lastd_date,frequency='1d',fields=['pre_close','open','close','high','high_limit','low_limit','paused']
+    ,skip_paused=False,fq='pre',count=check_duration,panel=False,fill_paused=True)
+   
+    df_up = df_price[(df_price.close == df_price.high_limit) & (df_price.paused == 0)].set_index('time')
+    # 标注出df_up中的time对应的是第几个交易日(ith)
+    df_up['ith'] = s_trd_days
+   
+    code_set = set(df_up.code.values)
+    poollist =[stockcode for stockcode in code_set if ((len(df_up[df_up.code ==stockcode]) >= up_num))]
+   
+    end_time = time.time()
+    log.info('--%d天(%s--%s)%d次以上涨停过滤出%d只标的,构建耗时:%.1f 秒' % (check_duration,back_date,lastd_date,up_num,len(poollist),end_time-start_time))        
+    #log.info(poollist)
+
+    return poollist
+
+# ---------------------------------函数定义-辅助函数-----------------------------------------------
+##买入函数
+def buy_stock(context,stockcode,cash):
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+   
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(1.1*last_price)) != None: #科创板需要设定限值
+            log.info('%s买入%s' % (today_date,stockcode))
+    else:
+        if order_target_value(stockcode, cash) != None:
+            log.info('%s买入%s' % (today_date,stockcode))
+           
+##卖出函数
+def sell_stock(context,stockcode,cash):
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+   
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(0.9*last_price)) != None: #科创板需要设定限值
+            log.info('%s卖出%s' % (today_date,stockcode))
+    else:
+        if order_target_value(stockcode,cash) != None:
+            log.info('%s卖出%s' % (today_date,stockcode))

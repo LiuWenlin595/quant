@@ -332,4 +332,19 @@ def order_target_value_(security, value):
 	return order_target_value(security, value)
 
 #4-2 交易模块-开仓
-#买入指定价值的证券,报单成功
+#买入指定价值的证券,报单成功并成交(包括全部成交或部分成交,此时成交量大于0)返回True,报单失败或者报单成功但被取消(此时成交量等于0),返回False
+def open_position(security, value):
+	order = order_target_value_(security, value)
+	if order != None and order.filled > 0:
+		return True
+	return False
+
+#4-3 交易模块-平仓
+#卖出指定持仓,报单成功并全部成交返回True，报单失败或者报单成功但被取消(此时成交量等于0),或者报单非全部成交,返回False
+def close_position(position):
+	security = position.security
+	order = order_target_value_(security, 0)  # 可能会因停牌失败
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+			return True
+	return False

@@ -245,4 +245,137 @@ def check_high_volume(context):
         if context.portfolio.positions[stock].closeable_amount ==0:
             continue
         df_volume = get_bars(stock,count=g.HV_duration,unit='1d',fields=['volume'],include_now=True, df=True)
-        if df_volume['
+        if df_volume['volume'].values[-1] > g.HV_ratio*df_volume['volume'].values.max():
+            log.info("[%s]天量，卖出" % stock)
+            position = context.portfolio.positions[stock]
+            close_position(position)
+#2-1 过滤停牌股票
+def filter_paused_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list if not current_data[stock].paused]
+
+#2-2 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list
+            if not current_data[stock].is_st
+            and 'ST' not in current_data[stock].name
+            and '*' not in current_data[stock].name
+            and '退' not in current_data[stock].name]
+
+#2-3 过滤科创北交股票
+def filter_kcbj_stock(stock_list):
+    for stock in stock_list[:]:
+        if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68':
+            stock_list.remove(stock)
+    return stock_list
+
+#2-4 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    current_data = get_current_data()
+    return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+            or last_prices[stock][-1] <    current_data[stock].high_limit]
+
+#2-5 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    current_data = get_current_data()
+    return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+            or last_prices[stock][-1] > current_data[stock].low_limit]
+
+#2-6 过滤次新股
+def filter_new_stock(context,stock_list):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if not yesterday - get_security_info(stock).start_date <  datetime.timedelta(days=375)]
+
+#2-6.5 过滤股价
+def filter_highprice_stock(context,stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] <= g.up_price]
+
+#2-7 删除本周一买入的股票
+def filter_not_buy_again(stock_list):
+    return [stock for stock in stock_list if stock not in g.not_buy_again]
+ 
+#3-1 交易模块-自定义下单
+def order_target_value_(security, value):
+    if value == 0:
+        pass
+        #log.debug("Selling out %s" % (security))
+    else:
+        log.debug("Order %s to value %f" % (security, value))
+    return order_target_value(security, value)
+
+#3-2 交易模块-开仓
+def open_position(security, value):
+    order = order_target_value_(security, value)
+    if order != None and order.filled > 0:
+        return True
+    return False
+
+#3-3 交易模块-平仓
+def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+
+#3-4 买入模块
+def buy_security(context,target_list):
+    #调仓买入
+    position_count = len(context.portfolio.positions)
+    target_num = len(target_list)
+    if target_num > position_count:
+        value = context.portfolio.cash / (target_num - position_count)
+        for stock in target_list:
+            if context.portfolio.positions[stock].total_amount == 0:
+            #if stock not in context.portfolio.positions:
+                if open_position(stock, value):
+                    log.info("买入[%s]（%s元）" % (stock,value))
+                    g.not_buy_again.append(stock) #持仓清单，后续不希望再买入
+                    if len(context.portfolio.positions) == target_num:
+                        break
+
+
+#4-1 判断今天是否为四月
+def today_is_between(context):
+    today = context.current_dt.strftime('%m-%d')
+    if g.pass_april is True:
+        if (('04-01' <= today) and (today <= '04-30')) or (('01-01' <= today) and (today <= '01-30')):
+            return True
+        else:
+           return False
+    else:
+        return False
+
+
+#4-2 清仓后次日资金可转
+def close_account(context):
+    if g.no_trading_today_signal == True:
+        if len(g.hold_list) != 0:
+            for stock in g.hold_list:
+                position = context.portfolio.positions[stock]
+                close_position(position)
+                log.info("卖出[%s]" % (stock))
+
+
+def print_position_info(context):
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+        print('———————————————————————————————————')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

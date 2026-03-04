@@ -366,4 +366,217 @@ class Chan_Strategy:
         sum = 0
         if start >= end:
             return sum
-        close_
+        close_price = np.array([x.close_price for x in self.chan_k_list if x.datetime >= start and x.datetime <= end],
+                               dtype=np.double)
+        diff, dea, macd = MACD(close_price)
+        for i, v in enumerate(macd.tolist()):
+            sum += round(v, 4)
+        return round(sum, 4)
+
+    def on_trend(self, new_pivot, data):
+        # 走势列表[[日期1，日期2，走势类型，[背驰点], [中枢]]]
+        if new_pivot:
+            data_list = new_pivot[4]
+            if len(self.trend_list) > 0:
+                last_pivot = self.pivot_list[-2]
+                last_trend = self.trend_list[-1]
+                # 上升趋势
+                if new_pivot[2] > last_pivot[3]:
+                    if last_trend[2] == 'up':
+                        # 新的中枢继续延申趋势
+                        last_trend[1] = new_pivot[1]
+                        last_trend[4].append(new_pivot)
+                        if data_list[0][3] == 'up' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] > 0:
+                            # up->up，背驰情况下，下一步可能趋势反转，产生S1, 后续产生S2, S3
+                            # 买点列表[[日期，值，类型, evaluation_time, valid, invalid_time]]
+                            self.on_buy_sell([data_list[2][2], data_list[2][0], 'S1', self.k_list[-1].datetime], True)
+                        if data_list[0][3] == 'up' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] <= 0:
+                            # up->up，能够形成B2, B3
+                            self.on_buy_sell([data_list[1][2], data_list[1][1], 'B2', self.k_list[-1].datetime], True)
+                        # if data_list[0][3] == 'down' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] <= 0:
+                        #     # up->up，能够形成B2, B3
+                        #     self.on_buy_sell([data_list[2][2], data_list[2][1], 'B2', datetime.now()], True)
+                    else:
+                        # 形成了新的逆向趋势
+                        self.trend_list.append([last_pivot[0], new_pivot[1], 'up', [], [last_pivot, new_pivot]])
+                        # down->up,能够形成B2,B3
+                        if data_list[0][3] == 'up' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] <= 0:
+                            self.on_buy_sell([data_list[1][2], data_list[1][1], 'B2', self.k_list[-1].datetime], True)
+                        # if data_list[0][3] == 'down' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] <= 0:
+                        #     self.on_buy_sell([data_list[2][2], data_list[2][1], 'B2', datetime.now()], True)
+                # 下降趋势
+                elif new_pivot[3] < last_pivot[2]:
+                    if last_trend[2] == 'down':
+                        last_trend[1] = new_pivot[1]
+                        last_trend[4].append(new_pivot)
+
+                        if data_list[0][3] == 'down' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] > 0:
+                            # down->down，背驰情况下，下一步可能趋势反转，产生B1, 后续产生B2, B3
+                            # 买点列表[[日期，值，类型, evaluation_time, valid, invalid_time]]
+                            self.on_buy_sell([data_list[2][2], data_list[2][1], 'B1', self.k_list[-1].datetime], True)
+
+                        if data_list[0][3] == 'down' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] <= 0:
+                            # down->down，能够形成S2, S3
+                            self.on_buy_sell([data_list[1][2], data_list[1][0], 'S2', self.k_list[-1].datetime], True)
+                        # if data_list[0][3] == 'up' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] <= 0:
+                        #     # down->down，能够形成S2, S3
+                        #     self.on_buy_sell([data_list[2][2], data_list[2][0], 'S2', datetime.now()], True)
+                    else:
+                        # 形成了新的逆向趋势
+                        self.trend_list.append([last_pivot[0], new_pivot[1], 'down', [], [last_pivot, new_pivot]])
+                        # up->down 能够形成S2, S3
+                        # if data_list[0][3] == 'up' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] <= 0:
+                        #     self.on_buy_sell([data_list[2][2], data_list[2][0], 'S2', datetime.now()], True)
+                        if data_list[0][3] == 'down' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] <= 0:
+                            self.on_buy_sell([data_list[1][2], data_list[1][0], 'S2', self.k_list[-1].datetime], True)
+
+                # 盘整
+                else:
+                    self.trend_list.append([new_pivot[0], new_pivot[1], 'pz', [], [new_pivot]])
+                    if last_trend[2] == 'up':
+                        # 形成卖点，S1
+                        if data_list[0][3] == 'up' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] > 0:
+                            # 买点列表[[日期，值，类型, evaluation_time, valid, invalid_time]]
+                            self.on_buy_sell([data_list[2][2], data_list[2][0], 'S1', self.k_list[-1].datetime], True)
+                    elif last_trend[2] == 'down':
+                        # 形成买点，B1
+                        if data_list[0][3] == 'down' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] > 0:
+                            # 买点列表[[日期，值，类型, evaluation_time, valid, invalid_time]]
+                            self.on_buy_sell([data_list[2][2], data_list[2][1], 'B1', self.k_list[-1].datetime], True)
+                    else:
+                        # 前面仍然是盘整， 这种情况应该不存在
+                        pass
+            else:
+                # 第一次盘整的情况
+                self.trend_list.append([new_pivot[0], new_pivot[1], 'pz', [], [new_pivot]])
+                if data_list[0][3] == 'up' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] > 0:
+                    # 买点列表[[日期，值，类型, evaluation_time, valid, invalid_time]]
+                    self.on_buy_sell([data_list[2][2], data_list[2][0], 'S1', self.k_list[-1].datetime], True)
+                if data_list[0][3] == 'down' and self.macd[data_list[0][2]] - self.macd[data_list[2][2]] > 0:
+                    # 买点列表[[日期，值，类型, evaluation_time, valid, invalid_time]]
+                    self.on_buy_sell([data_list[2][2], data_list[2][1], 'B1', self.k_list[-1].datetime], True)
+
+            # print('trend_list')
+            # print(self.trend_list)
+        else:
+            if len(self.trend_list) > 0:
+                # 如果中枢延续趋势跟随中枢延续
+                cur_trend = self.trend_list[-1]
+                cur_pivot = self.pivot_list[-1]
+                if cur_pivot[1] > cur_trend[1] and cur_pivot[0] == cur_trend[0]:
+                    cur_trend[1] = cur_pivot[1]
+
+                cur_fx = self.fx_list[-1]
+                # # 在有趋势的情况下判断背驰，没有新增的中枢
+                # if cur_trend[2] == 'up' and cur_fx[3] == 'up' and cur_fx[2] in self.macd.keys() and cur_pivot[
+                #     0] in self.macd.keys():
+                #     if self.macd[cur_fx[2]] - self.macd[cur_pivot[0]] < 0:
+                #         cur_trend[3].append(cur_fx[2])
+                #
+                # if cur_trend[2] == 'down' and cur_fx == 'down' and cur_fx[2] in self.macd.keys() and cur_pivot[
+                #     0] in self.macd.keys():
+                #     if self.macd[cur_fx[2]] - self.macd[cur_pivot[0]] > 0:
+                #         cur_trend[3].append(cur_fx[2])
+
+                if cur_trend[2] == 'pz':
+                    pass
+
+    def on_buy_sell(self, data, valid=True):
+        if not data:
+            return
+        # 买点列表[[日期，值，类型, evaluation_time, valid, invalid_time]]
+        # 卖点列表[[日期，值，类型, evaluation_time, valid, invalid_time]]
+        if valid:
+            if data[2].startswith('B'):
+                print('buy:')
+                print(data)
+                self.buy_list.append(data)
+                # order(g.security, 100)
+                order(g.security, round(3000/self.k_list[-1].close_price)*100)
+            else:
+                print('sell:')
+                print(data)
+                self.sell_list.append(data)
+                # order(g.security, -100)
+                order(g.security, round(3000/self.k_list[-1].close_price)*-100)
+        else:
+            if data[2].startswith('B'):
+                print('buy:')
+                print(data)
+                self.x_buy_list.append(data)
+            else:
+                print('sell:')
+                print(data)
+                self.x_sell_list.append(data)
+
+chan = Chan_Strategy()
+# 初始化函数，设定基准等等
+def initialize(context):
+    # 设定沪深300作为基准
+    set_benchmark('000300.XSHG')
+    # 开启动态复权模式(真实价格)
+    set_option('use_real_price', True)
+    # 输出内容到日志 log.info()
+    log.info('初始函数开始运行且全局只运行一次')
+    # 过滤掉order系列API产生的比error级别低的log
+    # log.set_level('order', 'error')
+
+    ### 股票相关设定 ###
+    # 股票类每笔交易时的手续费是：买入时佣金万分之三，卖出时佣金万分之三加千分之一印花税, 每笔交易佣金最低扣5块钱
+    set_order_cost(OrderCost(close_tax=0.001, open_commission=0.0003, close_commission=0.0003, min_commission=5), type='stock')
+
+    ## 运行函数（reference_security为运行时间的参考标的；传入的标的只做种类区分，因此传入'000300.XSHG'或'510300.XSHG'是一样的）
+      # 开盘前运行
+    run_daily(before_market_open, time='every_bar', reference_security='000300.XSHG')
+      # 开盘时运行
+    run_daily(market_open, time='every_bar', reference_security='000300.XSHG')
+    # 收盘后运行
+    run_daily(after_market_close, time='every_bar', reference_security='000300.XSHG')
+
+## 开盘前运行函数
+def before_market_open(context):
+    # 输出运行时间
+    log.info('函数运行时间(before_market_open)：'+str(context.current_dt.time()))
+
+    # 给微信发送消息（添加模拟交易，并绑定微信生效）
+    # send_message('美好的一天~')
+
+    # 要操作的股票：平安银行（g.为全局变量）
+    # g.security = '600809.XSHG'
+    # g.security = '600519.XSHG'
+    # g.security = '601818.XSHG'
+    # g.security = '300750.XSHE'
+    # g.security = '000300.XSHG'
+    # g.security = '002714.XSHE'
+    # g.security = '600436.XSHG'
+    # g.security = '600547.XSHG'
+    # g.security = '601211.XSHG'
+    # g.security = '002821.XSHE'
+    # g.security = '000001.XSHE'
+    # g.security = '000922.XSHE'
+    g.security = '300354.XSHE'
+    
+
+## 开盘时运行函数
+def market_open(context):
+    log.info('函数运行时间(market_open):'+str(context.current_dt.time()))
+    security = g.security
+    # 获取股票的收盘价
+    df = get_bars(security, count=1, unit='1m', fields=['date','open','high','low','close'])
+    if df is not None:
+        for row in df:
+            print(row)
+            bar = BarData(datetime=row[0], high_price=row[2], low_price=row[3], close_price=row[4])
+            chan.on_bar(bar)
+
+
+
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    #得到当天所有成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        log.info('成交记录：'+str(_trade))
+    log.info('一天结束')
+    log.info('##############################################################')

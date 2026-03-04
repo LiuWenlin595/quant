@@ -247,4 +247,137 @@ def sell_stocks_opened_from_up_limit(context):
 
     if sell_list:
     #    select_stocks(context) 
-    #    for
+    #    for stock in sell_list: 
+    #        if stock in g.buylist: 
+    #            g.buylist.remove(stock)
+
+        sell_stocks(context, sell_list)
+    #    buy_stocks(context, g.buylist)
+ 
+ # 尾盘买卖股；放量未涨停的卖出；低位的买进
+def sell_hi_vol_stocks_at_dayend_and_buy_again(context):
+
+    btlist = context.portfolio.positions
+    cdata=get_current_data()
+
+    #PY3 VOLT,MAVOL5,MAVOL10 = VOL(btlist, check_date=context.current_dt, M1=5, M2=10, include_now = True)
+
+    sell_list = []
+    for stock in btlist:
+        if (cdata[stock].last_price == cdata[stock].high_limit):
+            continue
+        stock_now_vol = now_vol(context, stock)
+        stock_ma10_vol = ma_vol(context, stock, 10)
+        if (stock_now_vol>stock_ma10_vol*3): #放量未涨停
+            log.info("[%s]放量未涨停，卖出" % cdata[stock].name)
+            sell_list.append(stock)
+    
+    if sell_list:
+    #    select_stocks(context) 
+    #    for stock in sell_list: 
+    #        if stock in g.buylist: 
+    #            g.buylist.remove(stock)
+
+        sell_stocks(context, sell_list)
+    
+    buy_stocks(context, g.buylist)
+
+
+def ma_vol(context, stock, number_of_days):   
+    df_vol = get_price(stock, end_date=context.previous_date, frequency='daily', count=number_of_days, fields=['volume'])
+    ft_ma_vol = df_vol['volume'].mean()
+    #print (stock, number_of_days, 'volume mean', ft_ma_vol) 
+    return ft_ma_vol    
+
+def now_vol(context, stock):   
+    
+    dt_zero_clock_today = context.current_dt - datetime.timedelta(hours=context.current_dt.hour, minutes=context.current_dt.minute, seconds=context.current_dt.second, microseconds=context.current_dt.microsecond)
+    #print ('dt_zero_clock_today', dt_zero_clock_today, type(dt_zero_clock_today))
+    dt_trading_start_today = dt_zero_clock_today + datetime.timedelta(hours=9, minutes=15, seconds=00)
+    #print ('dt_trading_start_today', dt_trading_start_today, type(dt_trading_start_today))
+
+    df_vol = get_price(stock, start_date=dt_trading_start_today, end_date=context.current_dt, frequency='minute', fields=['volume'])
+    ft_now_vol = df_vol['volume'].sum()
+    #print (stock, 'ft_now_vol', ft_now_vol)
+    return ft_now_vol    
+
+def analyze_stocks_held(context):
+    current_data = get_current_data()   #获取日期
+    hold_stocks = context.portfolio.positions.keys()
+    for s in hold_stocks:
+        q = query(valuation.code,valuation.market_cap,valuation.pe_ratio, indicator.inc_net_profit_year_on_year).filter(valuation.code == s)
+        df = get_fundamentals(q)
+        # log.info(s,current_data[s].name,'流值',df['circulating_market_cap'][0],'亿')
+        #log.info(s,current_data[s].name,'市值',df['market_cap'][0],'亿')
+        #log.info(s,current_data[s].name,'股价',current_data[s].last_price,'元')
+        log.info(s,current_data[s].name,'市盈率',df['pe_ratio'][0])
+        log.info(s,current_data[s].name,'净利润同比增长率',df['inc_net_profit_year_on_year'][0])
+        #inc_net_profit_year_on_year
+        #净利润同比增长率(%)	
+        #（当期的净利润-上年当期的净利润）/上年当期的净利润绝对值=净利润同比增长率。
+        #log.info('##############################################################')
+        #inc_net_profit_year_on_year
+        #净利润同比增长率(%)	
+        #（当期的净利润-上年当期的净利润）/上年当期的净利润绝对值=净利润同比增长率。
+    log.info('一天结束')
+    log.info('##############################################################')
+
+def after_trading_end(context):
+    g.total_value = context.portfolio.total_value
+    # 若总资金大于昨天纪录的资金新高值，则将资金新高值变为今日总资金，令最大回撤值归0；否则计算今日总资金的回撤值
+    if g.total_value > g.new_high_value:   
+        g.new_high_value = g.total_value  
+        g.maxdown = 0
+    else:
+        max_down = (g.new_high_value - g.total_value)/g.new_high_value*100
+    # 若今日总资金回撤值大于最大回撤值，则替代最大回撤值，否则最大回撤值不变。
+        g.maxdown = max_down if max_down > g.maxdown else g.maxdown
+    record(maxdown=g.maxdown)
+    
+# 过滤科创北交股票
+def filter_kcbj_stock(stock_list):
+    for stock in stock_list[:]:
+        if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68':
+            stock_list.remove(stock)
+    return stock_list
+
+# 过滤停牌股票
+def filter_paused_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list if not current_data[stock].paused]
+
+
+# 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list
+			if not current_data[stock].is_st
+			and 'ST' not in current_data[stock].name
+			and '*' not in current_data[stock].name
+			and '退' not in current_data[stock].name]
+
+
+# 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	
+	# 已存在于持仓的股票即使涨停也不过滤，避免此股票再次可买，但因被过滤而导致选择别的股票
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < current_data[stock].high_limit]
+
+# 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] > current_data[stock].low_limit]
+
+#2-4 过滤股价高于9元的股票	
+def filter_highprice_stock(context,stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < 9]
+						
+# end

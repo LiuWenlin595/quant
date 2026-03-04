@@ -346,4 +346,136 @@ def order_target_value_(security, value):
 	return order_target_value(security, value)
 
 #4-2 交易模块-开仓
-#买入指定价值的证券,报单成功并成交(包括全部成交或部分成交,此时成交量大于0)返回True,报
+#买入指定价值的证券,报单成功并成交(包括全部成交或部分成交,此时成交量大于0)返回True,报单失败或者报单成功但被取消(此时成交量等于0),返回False
+def open_position(security, value):
+	order = order_target_value_(security, value)
+	if order != None and order.filled > 0:
+		return True
+	return False
+
+#4-3 交易模块-平仓
+#卖出指定持仓,报单成功并全部成交返回True，报单失败或者报单成功但被取消(此时成交量等于0),或者报单非全部成交,返回False
+def close_position(position):
+	security = position.security
+	if position.total_amount != 0:
+	    order = order_target_value_(security, 0)  # 可能会因停牌失败
+	else:
+	    print(f'目前没有持有{get_security_info(security).display_name}')
+	    return position
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+			return True
+	return False
+
+#4-4 交易模块-调仓
+#当择时信号为买入时开始调仓，输入过滤模块处理后的股票列表，执行交易模块中的开平仓操作
+def adjust_position(context, buy_stock):
+	for stock in context.portfolio.positions:
+		if stock != buy_stock:
+			log.info("[%s]已不在应买入列表中" % (stock))
+			position = context.portfolio.positions[stock]
+			close_position(position)
+		else:
+			log.info("[%s]已经持有无需重复买入" % (stock))
+	# 根据股票数量分仓
+	# 此处只根据可用金额平均分配购买，不能保证每个仓位平均分配
+	position_count = len(context.portfolio.positions)
+	if g.stock_tobuy > position_count:
+		value = context.portfolio.cash / (g.stock_tobuy - position_count)
+		if context.portfolio.positions[buy_stock].total_amount == 0:
+			open_position(buy_stock, value)
+
+#4-5 交易模块-择时交易
+#结合择时模块综合信号进行交易
+def my_trade(context):
+    # if context.current_dt.minute != 35:
+    #    return
+    # 以下的代码每小时跑一次
+    #获取选股列表并过滤掉:st,st*,退市,涨停,跌停,停牌
+    stock_pool = get_stock_pool()
+    check_out_list,_ = get_rank(stock_pool, g.run_today_day, context)
+    print(f'check_out_list is {check_out_list}')
+    g.stock_df = rank_stock_change(check_out_list, context)
+    # check_out_list = filter_st_stock(check_out_list)
+    # check_out_list = filter_limitup_stock(context, check_out_list)
+    check_out_list = filter_limitdown_stock(context, check_out_list)
+    check_out_list = filter_paused_stock(check_out_list)
+    
+    if not check_out_list:# empoty list is False
+        print(f'Stock is limit up or limit down.')
+    else:
+    # print('今日自选股:{}'.format(get_security_info(check_out_list[0]).display_name))
+        print(f'今日自选股:{get_security_info(check_out_list[0]).display_name}')
+    #获取综合择时信号
+        for stock in check_out_list:
+            timing_signal = get_timing_signal(stock, context)
+            name = get_security_info(stock).display_name
+            print(f'{name} 今日择时信号:{timing_signal}')
+            #开始交易
+            if timing_signal == 'SELL':
+                for stock_pos in context.portfolio.positions:
+                    if stock_pos not in check_out_list:
+                        log.info("旧龙头已不再买入列表，卖出")
+                        position = context.portfolio.positions[stock_pos]
+                        close_position(position)
+                    else:
+                        position = context.portfolio.positions[stock]
+                        close_position(position)
+            elif timing_signal == 'BUY' or timing_signal == 'KEEP':
+                adjust_position(context, stock)
+                break # only buy one stock
+            else:
+                pass
+
+#4-6 交易模块-止损
+#检查持仓并进行必要的止损操作
+def check_lose(context):
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount
+        #这里设定15%止损
+        if ret <=-15:
+            order_target_value(position.security, 0)
+            print("！！！！！！触发止损信号: 标的={},标的价值={},浮动盈亏={}% ！！！！！！"
+                .format(securities,format(value,'.2f'),format(ret,'.2f')))
+            log.info('亏死了，溜溜溜')
+            
+#4-7 交易模块-止盈
+#根据移动止盈线止盈
+def check_profit(context):
+    for stock in context.portfolio.positions:
+        position = context.portfolio.positions[stock]
+        security = position.security
+        price = attribute_history(security,1,'1m','close')
+        highest = attribute_history(security,g.sec_data_num,'1d','high')
+        if price.close[-1] < highest.high.max()*(1-g.take_profit):
+            print('触发止盈，卖卖卖')
+            close_position(position)
+
+#5-1 复盘模块-打印
+#打印每日持仓信息
+def print_trade_info(context):
+    #打印当天成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        print('成交记录：'+str(_trade))
+    #打印账户信息
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+    print('一天结束')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

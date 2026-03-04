@@ -114,4 +114,135 @@ def prepare_trade(context):
 #1-4 整体调整持仓
 def weekly_adjustment(context):
 
-    g.target_list = filter_paused
+    g.target_list = filter_paused_stock(g.target_list)
+    g.target_list = filter_limitup_stock(context, g.target_list)
+    g.target_list = filter_limitdown_stock(context, g.target_list)
+    #过滤最近买过且涨停过的股票
+    black_list = get_recent_limit_up_stock(context, g.target_list, g.limit_days)
+    g.target_list = [stock for stock in g.target_list if stock not in black_list]
+
+    #调仓卖出
+    for stock in g.hold_list:
+        if (stock not in g.target_list) and (stock not in g.high_limit_list):
+            close_position(stock)
+
+    #调仓买入
+    position_count = len(context.portfolio.positions)
+    # target_num = len(g.target_list)
+    if position_count < g.stock_num:
+        value = context.portfolio.cash / (g.stock_num - position_count)
+        for stock in g.target_list:
+            if stock not in context.portfolio.positions.keys():
+                if open_position(stock, value):
+                    if len(context.portfolio.positions) >= g.stock_num:
+                        break
+
+
+#1-5 调整昨日涨停股票
+def check_limit_up(context):
+    now_time = context.current_dt
+    if g.high_limit_list != []:
+        #对昨日涨停股票观察到尾盘如不涨停则提前卖出，如果涨停即使不在应买入列表仍暂时持有
+        for stock in g.high_limit_list:
+            current_data = get_price(stock, end_date=now_time, frequency='1m', fields=['close','high_limit'], skip_paused=False, fq='pre', count=1, panel=False, fill_paused=True)
+            if current_data.iloc[0,0] < current_data.iloc[0,1]:
+                log.info("[%s]涨停打开，卖出" % (stock))
+                close_position(stock)
+            else:
+                log.info("[%s]涨停，继续持有" % (stock))
+
+
+
+#2-1 过滤停牌股票
+def filter_paused_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list if not current_data[stock].paused]
+
+#2-2 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list if not current_data[stock].is_st]
+
+#2-3 获取最近N个交易日内有涨停的股票
+def get_recent_limit_up_stock(context, stock_list, recent_days):
+    stat_date = context.previous_date
+    new_list = []
+
+    new_list = get_price(stock_list, end_date=stat_date, frequency='daily', fields=['close','high_limit'], count=recent_days, 
+        panel=False, fill_paused=False).query('close==high_limit').code.tolist()
+    return new_list
+
+#2-4 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < current_data[stock].high_limit]
+
+#2-5 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] > current_data[stock].low_limit]
+
+#2-6 过滤科创板
+def filter_kcb_stock(context, stock_list):
+    return [stock for stock in stock_list  if stock[0:3] != '688']
+
+#2-7 过滤次新股
+def filter_new_stock(context,stock_list):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=250)]
+
+#3-1 交易模块-自定义下单
+def order_target_value_(security, value):
+	if value == 0:
+		log.debug("Selling out %s" % (security))
+	else:
+		log.debug("Order %s to value %f" % (security, value))
+	return order_target_value(security, value)
+
+#3-2 交易模块-开仓
+def open_position(security, value):
+	order = order_target_value_(security, value)
+	if order != None and order.filled > 0:
+		return True
+	return False
+
+#3-3 交易模块-平仓
+def close_position(position):
+# 	security = position.security
+	order = order_target_value_(position, 0) 
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+			return True
+	return False
+
+
+
+#5-1 复盘模块-打印
+def print_position_info(context):
+    trades = get_trades()
+    for _trade in trades.values():
+        print('成交记录：'+str(_trade))
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        msg = '代码:{}'.format(securities)
+        msg2= '  成本价:{}'.format(format(cost,'.2f'))
+        msg3= '  现价:{}'.format(price)
+        msg4= '  收益率:{}%'.format(format(ret,'.2f'))
+        msg5= '  持仓(股):{}'.format(amount)
+        msg6= '  市值:{}'.format(format(value,'.2f'))
+        print(msg + msg2+ msg3+msg4+msg5+msg6)
+    print('———————————————————————————————————————分割线————————————————————————————————————————')
+
+
+"""
+todo:
+"""

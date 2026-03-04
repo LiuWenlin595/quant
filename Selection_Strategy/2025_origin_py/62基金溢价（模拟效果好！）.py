@@ -131,4 +131,106 @@ def exe_sell(context):
             if i<N:
                 message=message + ","
         send_message(message, channel='weixin')
-    # 限价单：为确保卖出，
+    # 限价单：为确保卖出，限价为当前价下浮2%。
+    # 与市价单相比，限价单因可挂单而更容易卖出
+    for etf in context.portfolio.positions.keys():
+        if (etf not in order_etf) and context.portfolio.positions[etf].closeable_amount:
+            # 今天开盘价
+            limit_price=current[etf].day_open*0.98     #下浮2%
+            order_sell=order_target(etf,0,LimitOrderStyle(limit_price))      
+            #if order_sell != None and order_sell.filled > 0:
+            if order_sell != None:
+                log.info("－－恭喜，已成功卖出基金%s【%s】－－" %  (get_security_info(etf).display_name,etf))
+            else:
+                log.info("－－遗憾，未成功卖出基金%s【%s】－－" %  (get_security_info(etf).display_name,etf))
+## 买入
+def exe_buy(context):
+    least_money_to_buy=5.00/g.trade_fee_ratio
+    # 如果现金不足且没有货币基金，则直接退出
+    if context.portfolio.available_cash < least_money_to_buy: 
+        return
+    current = get_current_data()
+    df = g.etf_df
+    #获得基金开盘价【最早在9:27读取】，并计算溢价'premium'
+    df['day_open'] = [current[c].day_open for c in df.index.tolist()]
+    df['premium'] = (df.day_open / df.unit_net_value - 1) * 100
+    # 因510210.XSHG在2023-06-19分红，导致计算premium错误而在2023-06-20买入，完善如下：
+    df['factor'] = [attribute_history(c, 1, '1d', fields=['factor'])['factor'][-1] for c in df.index.tolist()]
+    # 为简单处理：对于昨日分红的基金，则不考虑，直接删除
+    df=df[df['factor']==1] 
+    # 溢价必须在±20%之内，否则净值不合理而删除
+    df=df[abs(df['premium'])<20]
+    ## 根据溢价大小排序
+    if hasattr(df, 'sort'):
+        df = df.sort(['premium'], ascending = True)
+    else:
+        df = df.sort_values(['premium'], ascending = True)
+    # 买入的净值在一定差值范围内(现价与净值差小于g.least_premium%)
+    df = df[(df.premium < -1.0*g.least_premium)]
+    if len(df)>0:
+        log.info(" －－－ 买入：已有符合溢价<-%.2f条件的ETF, 溢价最小的前%s个的ETF －－－" % (g.least_premium,min(len(df),5)) )
+        log.info("符合条件的基金：\n%s" % df.head(5) )
+        g.least_premium=2.5
+    else:
+        log.info(" －－－ 买入：没有符合溢价<-%.2f条件的ETF －－－" % g.least_premium)    
+        g.least_premium=max(g.least_premium-0.15,1.5)
+    order_etf = df[:g.ETFNum_hold].index.tolist()
+    hold_set=set(context.portfolio.positions.keys())    #已持有的ETF
+    to_buy_set=set(order_etf) | hold_set                #买入后持有的ETF(并集)
+    to_buy_list=list(to_buy_set)
+    # 显示需要买入的etf列表
+    if len(to_buy_list)>0:
+        log.info(" ## In exe_buy, 需要买入的ETF列表 %s ##" % to_buy_list)
+    message="待买："
+    N=len( to_buy_list)
+    for i in range(N):
+        message=message + to_buy_list[i][:6]
+        if i<N:
+            message=message + ","
+        send_message(message, channel='weixin')
+    # 买入后持有ETF的类型数量
+    to_buy_num=len(to_buy_list)
+    if to_buy_num > 0:
+        cash = context.portfolio.available_cash / to_buy_num
+        # 金额太小，手续费的比重过大而不合算
+        if cash>least_money_to_buy:
+            for etf in to_buy_list:
+                # 限价单：为确保买入，限价为当前价上浮2%。
+                data_close = attribute_history(etf, 1, '1d', ['close'])['close']
+                # 昨日昨日收盘价
+                last_close=data_close[-1]
+                limit_price=last_close*1.02
+                # at 2023-10-10
+                limit_price=current[etf].day_open*1.02
+                # 下面买入操作，可能导致资金不足！！
+                num_to_buy=int(cash/(limit_price*1.005*1.00025)/100)*100
+                order_buy=order_target(etf,num_to_buy,LimitOrderStyle(limit_price))
+                if order_buy != None and order_buy.filled > 0:
+                    log.info("－－恭喜，已成功买入基金%s【%s】：%s股－－" %  (get_security_info(etf).display_name,etf,order_buy.filled))
+                else:
+                    log.info("－－遗憾，未成功买入基金%s【%s】－－" %  (get_security_info(etf).display_name,etf))
+##
+def after_trading_end(context):
+    log.info('－－－－ 股市在满天晚霞中落幕！－－－－')
+    '''
+    trades = get_trades()
+    for _trade in trades.values(): 
+        print('成交记录：'+str(_trade))
+    '''
+    print('—————————————————分割线—————————————')
+##
+## 根据ETF基金代码在东方财富网（etf.eastmoney.com）获取ETF的昨日净值
+def get_etf_value(stockcode):
+    #取基金代码的前6位
+    stockcode=stockcode[:6]
+    url = "http://etf.eastmoney.com/" + stockcode + ".html"
+    response = requests.get(url)
+    etfDataInfo = response.text
+    tmp_str="fix_dwjz  bold ui-color-green"
+    init_position=etfDataInfo.find(tmp_str)
+    if init_position==-1:
+        return -1   
+    else:
+        init_position=etfDataInfo.find(tmp_str)+len(tmp_str)
+        etf_value=float(etfDataInfo[init_position+2:init_position+8])
+        return etf_value

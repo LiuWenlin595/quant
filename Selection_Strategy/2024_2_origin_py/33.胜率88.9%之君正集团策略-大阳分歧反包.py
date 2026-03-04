@@ -172,4 +172,18 @@ def filter_stock_by_days(context, stock_list, days):
 def filter_stocks_by_days(context, stock_list, days):
     tmpList = []
     for stock in stock_list :
-        days_public=(context.
+        days_public=(context.current_dt.date() - get_security_info(stock).start_date).days
+        if days_public > days:
+            tmpList.append(stock)
+    return tmpList
+
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    #得到当天所有成交记录
+    g.help_stock = []
+    trades = get_trades()
+    for _trade in trades.values():
+        log.info('成交记录：'+str(_trade))
+    log.info('一天结束')
+    log.info('##############################################################')

@@ -148,3 +148,94 @@ def my_adjust_position(context, hold_stocks):
     if g.choose_time_signal and (not g.isbull):
         free_value = context.portfolio.total_value * g.bearpercent
         maxpercent = 1.3 / g.stocknum * g.bearpercent
+    else:
+        free_value = context.portfolio.total_value
+        maxpercent = 1.3 / g.stocknum
+    buycash = free_value / g.stocknum
+
+    for stock in context.portfolio.positions.keys():
+        current_data = get_current_data()
+        price1d = get_close_price(stock, 1)
+        nosell_1 = context.portfolio.positions[stock].price >= current_data[stock].high_limit
+        sell_2 = stock not in hold_stocks
+        if sell_2 and not nosell_1:
+            close_position(stock)
+        else:
+            current_percent = context.portfolio.positions[stock].value / context.portfolio.total_value
+            if current_percent > maxpercent:order_target_value(stock, buycash)
+
+def mybuy(context):
+    if not g.nohold:
+        # 避免卖出的股票马上买入
+        hold_stocks = filter_buyagain(g.chosen_stock_list)
+        log.info("待买股票列表：%s" %(hold_stocks))
+        if g.choose_time_signal and (not g.isbull):
+            free_value = context.portfolio.total_value * g.bearpercent
+            minpercent = 0.7 / g.stocknum * g.bearpercent
+        else:
+            free_value = context.portfolio.total_value
+            minpercent = 0.7 / g.stocknum
+        buycash = free_value / g.stocknum
+    
+        for i in range(min(g.buyrank, len(hold_stocks))):
+            free_cash = free_value - context.portfolio.positions_value
+            if hold_stocks[i] not in get_blacklist() and free_cash > context.portfolio.total_value / (g.stocknum * 10): # 黑名单里的股票不买
+                if hold_stocks[i] in context.portfolio.positions.keys():
+                    log.info("已经持有股票：[%s]" %(hold_stocks[i]))
+                    current_percent = context.portfolio.positions[hold_stocks[i]].value / context.portfolio.total_value
+                    if  current_percent >= minpercent:continue
+                    tobuy = min(free_cash, buycash - context.portfolio.positions[hold_stocks[i]].value)
+                else:
+                    tobuy = min(buycash, free_cash)
+                order_value(hold_stocks[i], tobuy)
+
+def get_bull_bear_signal_minute():
+    nowindex = get_close_price(g.MA[0], 1, '1m')
+    MAold = (attribute_history(g.MA[0], g.MA[1] - 1, '1d', 'close', True)['close'].sum() + nowindex) / g.MA[1]
+    if g.isbull:
+        if nowindex * (1 + g.threshold) <= MAold:
+            g.isbull = False
+    else:
+        if nowindex > MAold * (1 + g.threshold):
+            g.isbull = True
+
+def before_trading_start(context):
+    for stock in g.sold_stock.keys():
+        if g.sold_stock[stock] >= g.buyagain - 1:
+            del g.sold_stock[stock]
+        else:
+            g.sold_stock[stock] += 1
+    g.chosen_stock_list = get_stock_list(context)
+
+def myscheduler():
+    set_param()
+    unschedule_all()
+    run_daily(gogogo, '14:50')
+    run_daily(mybuy, '14:55')
+    
+def after_code_changed(context):
+    myscheduler()
+
+def initialize(context):
+    set_option('use_real_price', True)
+    set_option('avoid_future_data', True)
+    myscheduler()
+    g.isbull = False # 是否牛市
+    g.chosen_stock_list = [] # 存储选出来的股票
+    g.nohold = True # 空仓专用信号
+    g.sold_stock = {} # 近期卖出的股票及卖出天数
+
+def gogogo(context):
+    get_bull_bear_signal_minute()
+    if g.isbull:
+        log.info("当前市场判断为：牛市")
+    else:
+        log.info("当前市场判断为：熊市")
+    if g.choose_time_signal and (not g.isbull) and (not g.bearposition) or len(g.chosen_stock_list) < 10:
+        clear_position(context)
+        g.nohold = True
+    else:
+        g.chosen_stock_list = get_stock_rank_m_m(g.chosen_stock_list)
+        log.info(g.chosen_stock_list)
+        my_adjust_position(context, g.chosen_stock_list)
+        g.nohold = False

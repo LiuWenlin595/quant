@@ -201,4 +201,287 @@ def handle_data(context,data):
     
     #判断票池和仓位，全为空则轮空
     if len(context.portfolio.positions) ==0:
-        log.info('空仓，
+        log.info('空仓，今天休息')
+        return
+    
+    #判断仓位，若持仓则挂卖单
+    for stockcode in context.portfolio.positions:
+        if current_data[stockcode].paused == True:
+            continue
+        if context.portfolio.positions[stockcode].closeable_amount ==0:
+            continue
+        #止盈出
+        cost = context.portfolio.positions[stockcode].avg_cost
+        price = current_data[stockcode].last_price
+        
+        if price/cost > g.profit_line:
+            log.info('止盈即出%s' % stockcode)
+            sell_stock(context,stockcode,0)
+    
+    #14：55执行平仓
+    hour = context.current_dt.hour
+    minute = context.current_dt.minute
+    if hour == 14 and minute == 55:
+        for stockcode in context.portfolio.positions:
+            if current_data[stockcode].paused == True:
+                continue
+            if context.portfolio.positions[stockcode].closeable_amount ==0:
+                continue
+            log.info('尾盘平出%s' % stockcode)
+            sell_stock(context,stockcode,0)
+"""
+## 收盘时运行函数
+def market_run(context):
+    log.info('函数运行时间(market_close):'+str(context.current_dt.time()))
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    current_data = get_current_data()
+    
+    #尾盘只卖
+    hour = context.current_dt.hour
+    minute = context.current_dt.minute
+    
+    for stockcode in context.portfolio.positions:
+        if current_data[stockcode].paused == True:
+            continue
+        if context.portfolio.positions[stockcode].closeable_amount ==0:
+            continue
+        """
+        #止盈出
+        cost = context.portfolio.positions[stockcode].avg_cost
+        price = current_data[stockcode].last_price
+        
+        if price/cost > g.profit_line and hour !=14:
+            log.info('止盈即出%s' % stockcode)
+            sell_stock(context,stockcode,0)
+        elif hour == 14:
+            log.info('尾盘即出%s' % stockcode)
+            sell_stock(context,stockcode,0)
+        else:
+            log.info('%s留到尾盘' % stockcode)
+            
+        """
+        #非停出
+        if current_data[stockcode].last_price != current_data[stockcode].high_limit:
+            log.info('非涨停即出%s' % stockcode)
+            sell_stock(context,stockcode,0)
+            continue
+        
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    today_date = context.current_dt.date()
+    last_date = context.previous_date
+
+"""
+---------------------------------函数定义-主要策略-----------------------------------------------
+"""
+#蒋的方法，N天M涨停过滤
+def get_up_filter_jiang(context,stocklist,check_date,check_duration,up_num,direction):
+    # 输出运行时间
+    log.info('函数运行时间(get_up_filter_jiang)：'+str(context.current_dt.time()))
+    #0，预置，今天是D日
+    all_data = get_current_data()
+    poollist=[]
+    
+    # 交易日历
+    trd_days = get_trade_days(end_date=check_date, count=check_duration)  # array[datetime.date]
+    s_trd_days = pd.Series(range(len(trd_days)), index=trd_days)  # Series[index:交易日期，value:第几个交易日]
+    back_date = trd_days[0]
+    
+    #2，形态过滤，一月内两次以上涨停(盘中过10%也算)
+    start_time = time.time()
+    # 取数
+    df_price = get_price(stocklist,end_date=check_date,frequency='1d',fields=['pre_close','open','close','high','high_limit','low_limit','paused']
+    ,skip_paused=False,fq='pre',count=check_duration,panel=False,fill_paused=True)
+    
+    # 过滤出涨停的股票，按time索引
+    df_up = df_price[(df_price.close == df_price.high_limit) & (df_price.paused == 0)].set_index('time')
+    # 标注出df_up中的time对应的是第几个交易日(ith)
+    df_up['ith'] = s_trd_days
+    
+    code_set = set(df_up.code.values)
+    if direction ==1:
+        poollist =[stockcode for stockcode in code_set if ((len(df_up[df_up.code ==stockcode]) > up_num))]
+    elif direction ==-1:
+        poollist =[stockcode for stockcode in code_set if ((len(df_up[df_up.code ==stockcode]) < up_num))]
+    else:
+        poollist =[stockcode for stockcode in code_set if ((len(df_up[df_up.code ==stockcode]) == up_num))]
+    
+    end_time = time.time()
+    log.info('---%d天(%s--%s)%d次涨停过滤出%d只标的,构建耗时:%.1f 秒' % (check_duration,back_date,check_date,up_num,len(poollist),end_time-start_time))        
+    #log.info(poollist)
+
+    return poollist
+
+#对1-m板后的形态过滤，1和m是针对20-22年的过滤方案，l-是针对18-22年的一板过滤方案
+#去除T日是一字/T字/尾盘封板弱
+def optimize_filter(context,stocklist,filt_type):
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    all_data = get_current_data()
+    poollist =[]
+    
+    #其他条件,在循环中过滤
+    for stockcode in stocklist:
+        #过滤掉一字板，T字板;
+        df_lastd = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['open','close','high','high_limit','low_limit'],count=1)
+        if (df_lastd['open'][0] == df_lastd['high_limit'][0] and df_lastd['close'][0] == df_lastd['high_limit'][0]):
+            continue
+        #过滤掉尾盘封板弱的;
+        df_last30 = get_bars(stockcode, count=60, unit='1m', fields=['open','close','high','low'],include_now=True,df=True)
+        if (df_last30['low'][:].min() != df_lastd['high_limit'][0]) & (df_last30['high'][:].max() == df_lastd['high_limit'][0]):
+            continue
+        
+        df_value = get_valuation(stockcode, end_date=lastd_date, count=1, fields=['circulating_market_cap']) #先新后老
+        cirm_cap = df_value['circulating_market_cap'].values[0]
+        
+        df_price = get_price(stockcode,end_date=lastd_date,frequency='1d',fields=['open','close','high','low','paused','volume'],skip_paused=False,fq='pre',count=20,panel=False,fill_paused=True)
+        change_5 = df_price['close'][-1]/df_price['close'][-5]
+        change_20 = df_price['close'][-1]/df_price['close'].values.min()
+        vol_lvs20 = df_price['volume'][-1]/df_price['volume'].values.mean()
+        
+        if filt_type == 1:
+            if all_data[stockcode].last_price >8 and change_20 <1.3 and vol_lvs20 <4:
+                poollist.append(stockcode)
+        elif filt_type =='M':
+            if all_data[stockcode].last_price >15 and cirm_cap <50:
+                poollist.append(stockcode)
+        elif filt_type =='L':
+            if change_5 <1.1:
+                poollist.append(stockcode)
+            
+    return poollist
+
+##过滤N天内M倍最高量，X-买入前量能过滤，1X-为持仓的量能过滤
+def get_highvolume_filter(context,stocklist,control_mode,check_dura,volume_ratio):
+    lastd_date = context.previous_date
+    poollist =[]
+    
+    for stockcode in stocklist:
+        if control_mode ==1:
+            df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['volume'],count=check_dura)
+            if df_price['volume'][-1] > volume_ratio*df_price['volume'].max():
+                continue
+            poollist.append(stockcode)
+        elif control_mode ==2:
+            df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['volume'],count=check_dura)
+            if df_price['volume'][-1] > volume_ratio*df_price['volume'].mean():
+                continue
+            poollist.append(stockcode)
+        elif control_mode ==3:
+            df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['volume'],count=check_dura)
+            if df_price['volume'][-1] > volume_ratio*df_price['volume'][-2]:
+                continue
+            poollist.append(stockcode)
+        elif control_mode ==4:
+            df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['volume'],count=240)
+            if df_price['volume'][-1] > 0.9*df_price['volume'].max():
+                continue
+            if df_price['volume'][-1] > 5*df_price['volume'][-20:].mean():
+                continue
+            poollist.append(stockcode)
+        elif control_mode ==11:
+            df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['volume'],count=check_dura)
+            if df_price['volume'][-1] < volume_ratio*df_price['volume'].max():
+                continue
+            poollist.append(stockcode)
+        elif control_mode ==12:
+            df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['volume'],count=check_dura)
+            if df_price['volume'][-1] < volume_ratio*df_price['volume'].mean():
+                continue
+            poollist.append(stockcode)
+        elif control_mode ==13:
+            df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['volume'],count=check_dura)
+            if df_price['volume'][-1] < volume_ratio*df_price['volume'][-2]:
+                continue
+            poollist.append(stockcode)
+        elif control_mode ==14:
+            df_price = get_price(stockcode,end_date=lastd_date,frequency='daily',fields=['volume'],count=240)
+            if df_price['volume'][-1] < 0.9*df_price['volume'].max():
+                continue
+            if df_price['volume'][-1] < 5*df_price['volume'][-20:].mean():
+                continue
+            poollist.append(stockcode)
+    
+    print('---量能控制%d-%d天放%.1f量过滤后共%d只' % (control_mode,check_dura,volume_ratio,len(poollist)))
+    return poollist
+"""
+---------------------------------函数定义-次要过滤-----------------------------------------------
+"""
+
+"""
+---------------------------------函数定义-辅助函数-----------------------------------------------
+"""
+##买入函数
+def buy_stock(context,stockcode,cash):
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+    
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(1.1*last_price)) != None: #科创板需要设定限值
+            log.info('%s买入%s' % (today_date,stockcode))
+    else:
+        if order_target_value(stockcode, cash) != None:
+            log.info('%s买入%s' % (today_date,stockcode))
+            
+##卖出函数
+def sell_stock(context,stockcode,cash):
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+    
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(0.9*last_price)) != None: #科创板需要设定限值
+            log.info('%s卖出%s' % (today_date,stockcode))
+    else:
+        if order_target_value(stockcode,cash) != None:
+            log.info('%s卖出%s' % (today_date,stockcode))
+
+##个股盘中分析信后的未来走势，带未来
+def stock_analysis(context,stocklist):
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    all_data = get_current_data()
+    
+    #pop = CYF(stocklist, check_date=lastd_date, N=20)
+    for stockcode in stocklist:
+        stockname = get_security_info(stockcode).display_name
+        
+        df_value = get_valuation(stockcode, end_date=lastd_date, count=1, fields=['circulating_market_cap']) #先新后老
+        cirm_cap = df_value['circulating_market_cap'].values[0]
+        
+        df_price = get_price(stockcode,end_date=lastd_date,frequency='1d',fields=['open','close','high','low','paused','volume'],skip_paused=False,fq='pre',count=20,panel=False,fill_paused=True)
+        change_5 = df_price['close'][-1]/df_price['close'][-5]
+        change_20 = df_price['close'][-1]/df_price['close'][0]
+        change_5v20 = change_5/change_20
+        
+        vol_lvs5 = df_price['volume'][-1]/df_price['volume'][-5:].mean()
+        vol_5vs20 = df_price['volume'][-5:].mean()/df_price['volume'].values.mean()
+        
+        df_money = get_money_flow(stockcode, end_date=lastd_date, count=2, fields=['net_amount_main'])  #先新后老
+        #存在昨日负流入或为零的状况
+        net_main_lbvsb = (df_money['net_amount_main'].values[0]-df_money['net_amount_main'].values[-1])/df_money['net_amount_main'].values[0]
+        
+        #看未来1-5日的涨跌幅
+        fut_date_list = get_trade_days(start_date = today_date,end_date = '2022-02-11')
+        if len(fut_date_list) >=5:
+            fut5_date = get_trade_days(start_date= today_date)[4]
+            next_date = get_trade_days(start_date= today_date)[1]
+        else:
+            fut5_date = get_trade_days(start_date= today_date)[-1]
+            next_date = get_trade_days(start_date= today_date)[1]
+    
+        future5_price = get_price(stockcode, start_date=today_date, end_date=fut5_date, frequency='daily', fields=['open','close','high','low'])
+        next_price = get_price(stockcode, start_date=today_date, end_date=next_date, frequency='daily', fields=['pre_close','open','close','high','low','avg'])
+        
+        price_D = next_price['open'].values[0]  #今天9:30买入
+        catch = price_D/next_price['pre_close'].values[0]
+        d2_open = next_price['open'].values[-1]/price_D
+        d2_avg = next_price['avg'].values[-1]/next_price['avg'].values[0]
+        d2_close = next_price['close'].values[-1]/price_D
+        d5_close = future5_price['close'].values[-1]/price_D
+
+        write_file('201.csv', str('%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.2f,%.2f,%.2f,%.2f\n' % (today_date,stockcode,stockname,cirm_cap,change_5
+        ,change_20,change_5v20,vol_lvs5,vol_5vs20,net_main_lbvsb,price_D,catch,d2_open,d2_close,d2_avg,d5_close)),append = True)

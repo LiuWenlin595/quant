@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# (已移除或注释) In[17]:
+
+
 from jqdata import *
 import datetime
 import pandas as pd 
@@ -20,25 +23,49 @@ end_date = '2022-03-01'
 trade_days = get_trade_days(start_date=start_date, end_date=end_date, count=None)
 trade_days[:5],trade_days[-5:]
 
+
+# (已移除或注释) In[18]:
+
+
 # 量价信息
 price_df = get_price(stock_lists, start_date=start_date, end_date=end_date, frequency='daily', fields=['open','close','low','high','volume','money',
         'high_limit','low_limit','pre_close','paused'], skip_paused=False, fq='post', count=None,round=True,panel=False)
 price_df.head()
 
+
+# (已移除或注释) In[19]:
+
+
 has_limit_stocks = list(price_df.query("close == high_limit")['code'].unique())
 
+
+# (已移除或注释) In[20]:
+
+
 stock_lists = has_limit_stocks
+
+
+# (已移除或注释) In[21]:
+
 
 st_df = get_extras('is_st', stock_lists, start_date=start_date, end_date=end_date)
 st_df = st_df.stack().reset_index().rename(columns={'level_0':'time','level_1':'code',0:'is_st'})
 st_df.head()
 
+
 # # 数据合并
+
+# (已移除或注释) In[22]:
+
 
 merge_df = price_df.merge(stock_df,how='left',on=['code'],suffixes=['','_x'])
 merge_df = merge_df.merge(st_df,how='left',on=['code','time'],suffixes=['','_x'])
 merge_df['list_days'] = (merge_df['time'] - pd.to_datetime(merge_df['start_date'])).dt.days
 merge_df.head()
+
+
+# (已移除或注释) In[23]:
+
 
 def cal_lb_count(xs):
     """
@@ -54,6 +81,10 @@ def cal_lb_count(xs):
     return x 
     
 
+
+# (已移除或注释) In[24]:
+
+
 merge_df['open_valid1'] = merge_df.groupby('code')['open'].shift(-1)
 merge_df['is_close_high_limit'] = (merge_df['close'] == merge_df['high_limit']) * (1-merge_df['paused'])
 merge_df['is_low_high_limit'] = (merge_df['low'] == merge_df['high_limit']) * (1-merge_df['paused'])
@@ -63,7 +94,11 @@ merge_df['最大连板数'] = merge_df.groupby('code').rolling(20)['is_close_hig
 merge_df['open_pct_valid_1'] = merge_df['open_valid1']/merge_df['close']
 merge_df.head()
 
+
 # ## 衍生特征
+
+# (已移除或注释) In[25]:
+
 
 # 概念龙头特征计算
 result_dfs = []
@@ -94,6 +129,10 @@ for t,tmp_df in tqdm(merge_df.query("is_close_high_limit == 1").groupby('time'))
 hot_concept_df = pd.DataFrame(result_dfs)
 hot_concept_df.head()
 
+
+# (已移除或注释) In[26]:
+
+
 # 当天市场特征
 day_feature_df = pd.DataFrame(merge_df.groupby('time')['最大连板数'].max().rename("市场最大连板数"))
 day_feature_df['一字板数量'] = merge_df.groupby('time')['is_low_high_limit'].sum()
@@ -107,12 +146,28 @@ day_feature_df['近3天市场最低涨停溢价'] = day_feature_df['涨停溢价
 day_feature_df['今天是否等于近3天市场最大连板数'] = day_feature_df['市场最大连板数']==day_feature_df['近3天市场最大连板数']
 day_feature_df.tail(10)
 
+
+# (已移除或注释) In[27]:
+
+
 day_feature_df = day_feature_df.merge(hot_concept_df,how='left',left_index=True,right_on=['time'])
 day_feature_df.head()
+
+
+# (已移除或注释) In[28]:
+
 
 # 只看今天有涨停的票
 merge_df = merge_df.query("is_close_high_limit == 1").merge(day_feature_df,how='left',on=['time'],suffixes=['','_市场'])
 merge_df.head()
 
+
+# (已移除或注释) In[29]:
+
+
+
 # - 股票是否在概念龙头中
 merge_df['股票在概念龙头'] = merge_df.apply(lambda row: row['code'] in row['概念龙头股票列表'],axis=1)
+
+
+# (已移除或注释) In[ ]:

@@ -274,4 +274,110 @@ def get_dividend_ratio_filter_list(context, stock_list, sort, p1, p2):
 # （当期的净利润-上月（上年）当期的净利润）/上月（上年）当期的净利润绝对值=净利润同比增长率
 
 # PEG 指标
-# 百度百科：https://baike.baidu.com/item/PEG%E
+# 百度百科：https://baike.baidu.com/item/PEG%E6%8C%87%E6%A0%87/10904043
+
+# PEG指标(市盈率相对盈利增长比率)是用公司的市盈率除以公司的盈利增长速度
+# PEG指标(市盈率相对盈利增长比率)是Jim Slater发明的一个股票估值指标，是在PE（市盈率）估值的基础上发展起来的
+# 它弥补了PE对企业动态成长性估计的不足
+# 当时他在选股的时候就是选那些市盈率较低，同时它们的增长速度又是比较高的公司
+# 这些公司有一个典型特点就是PEG会非常低
+def get_peg(context,stocks):
+
+    # 通过 filter 子句限制了PEG的范围
+    q = query(valuation.code,
+                ).filter(
+                    valuation.pe_ratio / indicator.inc_net_profit_year_on_year > -3,
+                    valuation.pe_ratio / indicator.inc_net_profit_year_on_year < 3,
+                    valuation.code.in_(stocks)
+                    )
+                    
+    df_fundamentals = get_fundamentals(q)       
+    
+    stocks = list(df_fundamentals.code)
+    
+    # 对于筛选出来的股票按照 市值升序 排列
+    df = get_fundamentals(query(valuation.code).\
+                          filter(valuation.code.in_(stocks)).\
+                          order_by(valuation.market_cap.asc()))
+    
+    return  list(df.code)
+
+
+
+
+
+# 获取昨日涨停股票列表
+def get_high_limit(context):
+    
+    # 清空昨日涨停列表
+    g.high_limit_list = []
+    
+    # 获取当前持仓列表
+    hold_list = list(context.portfolio.positions)
+    
+    # 读取所有持仓股票的昨日收盘价和涨停价数据
+    # 从 panel 中截取数据框 - 注意，panel 数据在未来将不再被支持
+    # 如果将来无法运行。可以修改这段代码
+    # 比如使用 for 循环遍历持仓股票，分析涨停情况
+    if hold_list:
+        
+        df = get_price(hold_list, end_date=context.previous_date, frequency='daily',
+                       fields=['close', 'high_limit'],
+                       count=1).iloc[:,0,:]
+                       
+        g.high_limit_list = list(df[df['close'] == df['high_limit']].index)
+
+
+
+# 调整昨日涨停股票
+def check_high_limit(context):
+    
+    # 获取持仓的昨日涨停列表
+    current_data = get_current_data()
+    
+    if g.high_limit_list:
+        
+        for stock in g.high_limit_list:
+            
+            if current_data[stock].last_price < current_data[stock].high_limit:
+                log.info("[%s]涨停打开，卖出" % stock)
+                order_target(stock, 0)
+            else:
+                log.info("[%s]涨停，继续持有" % stock)
+
+
+
+
+# 高效过滤股票函数
+def filter_all_stocks(context, stock_list):
+    
+    curr_data = get_current_data()
+    
+    return [stock for stock in stock_list if not (
+            stock.startswith(('68', '4', '8')) or      # 科创，北交所
+            curr_data[stock].paused or
+            curr_data[stock].is_st  or  # ST
+            ('ST' in curr_data[stock].name) or
+            ('*'  in curr_data[stock].name) or
+            ('退' in curr_data[stock].name) or
+            (curr_data[stock].last_price == curr_data[stock].high_limit)  or
+            (curr_data[stock].last_price == curr_data[stock].low_limit)      
+    )]
+
+
+
+# 过滤价格较高的股票
+def filter_highprice_stock(context,stock_list):
+
+	df = history(1, unit='1m', field='close', security_list=stock_list)
+	
+	price_list = df.values[0].copy()
+	
+	price_list.sort()
+	
+	price = price_list[int(0.75*len(df.T))]
+	
+	return [stock for stock in stock_list if df[stock][-1] < price]
+	
+			
+# end

@@ -1,0 +1,11 @@
+[2026-02-24 02:32:50] 开始处理，输入目录: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2022_origin
+[2026-02-24 02:32:50] 输出目录: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2022_origin_py
+[2026-02-24 02:32:50] 日志文件: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2022_origin_py/process_log_20260224_023250.txt
+[2026-02-24 02:32:50] 找到 97 个文件需要处理
+
+[2026-02-24 02:32:50] 
+[1/97] 处理文件: 1.易方达二八轮动测试.txt
+[2026-02-24 02:33:12]   ✓ 成功处理并保存到: /Users/liuwenlin/Documents/Self/quant/Selection_Strategy/2022_origin_py/1.易方达二八轮动测试.py
+[2026-02-24 02:33:12] 进度: 1/97 (成功: 1, 失败: 0)
+[2026-02-24 02:33:12] 
+[2/97] 处理文件: 10.期货macd简单择时，atp止损.txt

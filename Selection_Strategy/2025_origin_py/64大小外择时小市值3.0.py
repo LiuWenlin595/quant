@@ -430,4 +430,117 @@ def filter_new_stock(context, stock_list):
             not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=375)]
 
 ## 开盘前运行函数
-def White
+def White_Horse(context):
+    Market_temperature(context)
+    print(f"本月温度为：{g.market_temperature}")
+    check_out_lists = []
+    current_data = get_current_data()
+    check_date = context.previous_date - datetime.timedelta(days=200)
+    all_stocks = list(get_all_securities(date=check_date).index)
+    all_stocks = get_index_stocks("000300.XSHG")
+    # 过滤创业板、ST、停牌、当日涨停
+    all_stocks = [stock for stock in all_stocks if not (
+            (current_data[stock].day_open == current_data[stock].high_limit) or  # 涨停开盘
+            (current_data[stock].day_open == current_data[stock].low_limit) or  # 跌停开盘
+            current_data[stock].paused or  # 停牌
+            current_data[stock].is_st or  # ST
+            ('ST' in current_data[stock].name) or
+            ('*' in current_data[stock].name) or
+            ('退' in current_data[stock].name) or
+            (stock.startswith('30')) or  # 创业
+            (stock.startswith('68')) or  # 科创
+            (stock.startswith('8')) or  # 北交
+            (stock.startswith('4'))   # 北交
+    )]
+    if g.market_temperature == "cold":
+        q = query(
+            valuation.code, 
+            ).filter(
+            valuation.pb_ratio > 0,
+            valuation.pb_ratio < 1,
+            cash_flow.subtotal_operate_cash_inflow > 0,
+            indicator.adjusted_profit > 0,
+            cash_flow.subtotal_operate_cash_inflow/indicator.adjusted_profit>2.0,
+            indicator.inc_return > 1.5,
+            indicator.inc_net_profit_year_on_year > -15,
+        	valuation.code.in_(all_stocks)
+        	).order_by(
+        	(indicator.roa/valuation.pb_ratio).desc()
+        ).limit(
+        	g.buy_stock_count + 1
+        )
+    elif g.market_temperature == "warm":
+        q = query(
+            valuation.code, 
+            ).filter(
+            valuation.pb_ratio > 0,
+            valuation.pb_ratio < 1,
+            cash_flow.subtotal_operate_cash_inflow > 0,
+            indicator.adjusted_profit > 0,
+            cash_flow.subtotal_operate_cash_inflow/indicator.adjusted_profit>1.0,
+            indicator.inc_return > 2.0,
+            indicator.inc_net_profit_year_on_year > 0,
+        	valuation.code.in_(all_stocks)
+        	).order_by(
+        	(indicator.roa/valuation.pb_ratio).desc()
+        ).limit(
+        	g.buy_stock_count + 1
+        )
+    elif g.market_temperature == "hot":
+        q = query(
+            valuation.code, 
+            ).filter(
+ 
+            valuation.pb_ratio > 3,
+            cash_flow.subtotal_operate_cash_inflow > 0,
+            indicator.adjusted_profit > 0,
+            cash_flow.subtotal_operate_cash_inflow/indicator.adjusted_profit>0.5,
+            indicator.inc_return > 3.0,
+            indicator.inc_net_profit_year_on_year > 20,
+        	valuation.code.in_(all_stocks)
+        	).order_by(
+        	indicator.roa.desc()
+        ).limit(
+        	g.buy_stock_count + 1
+        )
+                
+        
+    check_out_lists = list(get_fundamentals(q).code)
+    # 取需要的只数
+    #check_out_lists = check_out_lists[:g.buy_stock_count]
+    return check_out_lists
+    log.info("今日股票池：%s" % check_out_lists)
+    #  tttttttttttt
+def Market_temperature(context):
+    
+    index300 = attribute_history('000300.XSHG', 220, '1d', ('close'), df=False)['close']
+    market_height = (mean(index300[-5:]) - min(index300)) / (max(index300) - min(index300))
+    if market_height < 0.20:
+        g.market_temperature = "cold"
+
+    elif market_height > 0.90:
+        g.market_temperature = "hot"
+
+    elif max(index300[-60:]) / min(index300) > 1.20:
+        g.market_temperature = "warm"
+
+    
+    if g.market_temperature == "cold":
+        temp = 200
+    elif g.market_temperature == "warm":
+        temp = 300
+    else:
+        temp = 400
+        
+    if context.run_params.type != 'sim_trade':
+        record(temp=temp)
+
+
+####
+def fun_delNewShare(context, equity, deltaday):
+    deltaDate = context.current_dt.date() - dt.timedelta(deltaday)
+    tmpList = []
+    for stock in equity:
+        if get_security_info(stock).start_date < deltaDate:
+            tmpList.append(stock)
+    return tmpList

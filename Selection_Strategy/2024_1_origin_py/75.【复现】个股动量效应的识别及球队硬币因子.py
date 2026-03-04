@@ -99,7 +99,6 @@
 # 
 # 这里我们还尝试将换手率还我自由流通换手率,用以测试因子效果
 
-
 from typing import List, Tuple
 
 import empyrical as ep
@@ -115,7 +114,6 @@ qlib.init(provider_uri="data/qlib_data", region="cn")
 
 
 # # 生成因子
-
 
 all_data: pd.DataFrame = get_factor_data_and_forward_return(
     SportBettingsFactor,
@@ -133,7 +131,6 @@ all_data.to_pickle('data/pkl/all_data.pkl')
 
 
 # # 因子分析
-
 
 # 数据读取
 all_data:pd.DataFrame = pd.read_pickle('data/pkl/all_data.pkl')
@@ -158,7 +155,6 @@ plot_cumulativeline_from_dataframe(group_cum)
 
 # # 使用Qlib进行检验
 
-
 from qlib.data.dataset import DatasetH
 from qlib.data.dataset.handler import DataHandlerLP
 from src.plotting import model_performance_graph, report_graph
@@ -167,4 +163,253 @@ from src.utils import load2qlib
 
 
 TARIN_PERIODS: Tuple = ("2014-01-01", "2017-12-31")
-VALID_PERIODS: Tuple = ("2018-01-0
+VALID_PERIODS: Tuple = ("2018-01-01", "2019-12-31")
+TEST_PERIODS: Tuple = ("2020-01-01", "2023-02-17")
+
+
+all_data:pd.DataFrame = pd.read_pickle('data/pkl/all_data.pkl')
+
+
+all_data.head()
+
+
+# 获取基础因子
+sel_cols: List = [
+    factor
+    for factor in all_data.columns
+    if (factor not in ["coin_team", "coin_team_f"]) and (factor.find("revise") == -1)
+]
+
+factor_base: pd.DataFrame = all_data[sel_cols].copy()
+
+
+# 将pd.DataFrame转为DatasetH
+ds:DatasetH = load2qlib(factor_base,TARIN_PERIODS,VALID_PERIODS,TEST_PERIODS)
+
+
+# 储存ds数据
+ds.config(dump_all=True, recursive=True)
+ds.to_pickle(path="data/pkl/dataset.pkl", dump_all=True)
+
+
+# 储存dh_pr数据用于后续滚动训练
+dh_pr: DataHandlerLP = load2qlib(
+    factor_base, TARIN_PERIODS, VALID_PERIODS, TEST_PERIODS, output_type="DataHandlerLP"
+)
+
+dh_pr.to_pickle(path="data/pkl/data_dhpr.pkl", dump_all=True)
+
+
+# ## 球队硬币(coin-team factor)因子(Baseline)
+# 
+# 以研报中的球队硬币因子为基线,时间范围选择2020年至2023-02-17,可以看到球队硬币因子有很好的单调性,低分组(因子值小)的收益最好
+
+cointeam_pred_df: pd.DataFrame = all_data.loc[
+    TEST_PERIODS[0] : TEST_PERIODS[1], ["coin_team", "next_ret"]
+].rename(columns={"coin_team": "score", "next_ret": "label"})
+
+
+performance_graph = model_performance_graph(cointeam_pred_df)
+
+
+# 使用
+baseline_model = QlibFlow(
+    dataset=ds, model="gbdt", start_time=TEST_PERIODS[0], end_time=TEST_PERIODS[1]
+)
+
+
+# 这里对球队硬币因子进行回测,虽然初始化了数据,但最终使用backtest方法时仅使用球队硬币因子值进行回测,回测默认使用**因子值最大**的topk只股票构建组合,所以这里我们将因子值乘-1反转因子值。
+
+coin_team:pd.DataFrame = all_data['coin_team_f'].to_frame('score')
+baseline_model.backtest(pred_score=coin_team*-1,topk=50)
+
+
+coin_team_1day_df: pd.DataFrame = baseline_model.portfolio_metric_dict['1day'][0]
+
+
+coin_team_return_fig = report_graph(coin_team_1day_df)
+
+
+# ## LGBMRanker模型
+
+lgbmrank_model = QlibFlow(
+    dataset=ds,
+    model="ranker",
+    start_time=TEST_PERIODS[0],
+    end_time=TEST_PERIODS[1],
+    model_kw={"eval_at": [5]},
+)
+
+
+lgbmrank_model.fit('rk_train') # 
+lgbmrank_model.predict('rk_predict')
+lgbmrank_model.backtest(topk=50)
+
+
+pred_label_df: pd.DataFrame = lgbmrank_model.get_pred(experiment_name="rk_predict",recorder_id='e7851ce3fd48483ca999d05162dbf72b')
+pred_label_df.tail()
+
+
+performance_graph = model_performance_graph(pred_label_df)
+
+
+rk_fig = report_graph(lgbmrank_model.portfolio_metric_dict['1day'][0])
+
+
+# ## LGBM模型复合因子
+
+gdbt_model = QlibFlow(
+    dataset=ds, model="gbdt", start_time=TEST_PERIODS[0], end_time=TEST_PERIODS[1]
+)
+
+
+gdbt_model.fit('train')
+gdbt_model.predict('predict')
+gdbt_model.backtest(topk=50)
+
+
+pred_label_df: pd.DataFrame = gdbt_model.get_pred(experiment_name="predict")
+pred_label_df.tail()
+
+
+performance_graph = model_performance_graph(pred_label_df)
+
+
+fig = report_graph(gdbt_model.portfolio_metric_dict['1day'][0])
+
+
+# ## 对比
+
+from typing import Dict
+
+
+ranker_ic_dict: Dict = lgbmrank_model.R.get_recorder(
+    experiment_name="rk_v_predict", recorder_id="e7851ce3fd48483ca999d05162dbf72b"
+).list_metrics()
+gdbt_ic_dict: Dict = gdbt_model.R.get_recorder(
+    experiment_name="predict", recorder_id="f2968244299e4bca8ff80c619979a63b"
+).list_metrics()
+
+
+ic_df: pd.DataFrame = pd.concat(
+    (pd.Series(ranker_ic_dict), pd.Series(gdbt_ic_dict)), axis=1
+)
+ic_df.columns = ["ranker", "gdbt"]
+
+
+ic_df
+
+
+# # 日间/日内低波动率反转因子
+
+# ## LGBMRanker模型
+
+volatility_momentum: pd.DataFrame = get_factor_data_and_forward_return(
+    VolatilityMomentum,
+    window=20,
+    periods=1,
+    factor_names=["interday_volatility_reverse", "intraday_volatility_reverse"],
+)
+
+
+volatility_momentum.tail()
+
+
+# 储存数据
+volatility_momentum.to_pickle('data/pkl/volatility_momentum.pkl')
+
+
+volatility_momentum: pd.DataFrame = pd.read_pickle("data/pkl/volatility_momentum.pkl")
+
+
+clean_factor_res = get_factor_group_returns(volatility_momentum,quantiles=5,max_loss=0.48)
+
+
+group_cum: pd.DataFrame = clean_factor_res.factor_return.groupby(
+    level=0, axis=1, group_keys=False
+).apply(ep.cum_returns)
+
+
+plot_cumulativeline_from_dataframe(group_cum,figsize=(18,4))
+
+
+# 将pd.DataFrame转为DatasetH
+ds:DatasetH = load2qlib(volatility_momentum,TARIN_PERIODS,VALID_PERIODS,TEST_PERIODS)
+
+
+lgbmrank_v_model = QlibFlow(
+    dataset=ds, model="ranker", start_time=TEST_PERIODS[0], end_time=TEST_PERIODS[1],model_kw={"eval_at":[3]}
+)
+
+
+lgbmrank_v_model.fit('rk_v_train')
+lgbmrank_v_model.predict('rk_v_predict')
+lgbmrank_v_model.backtest()
+
+
+pred_label_df: pd.DataFrame = lgbmrank_v_model.get_pred(
+    experiment_name="rk_v_predict",recorder_id="6eeae73a03b64abe90bb2c533cbac1b3"
+)
+
+
+performance_graph = model_performance_graph(pred_label_df,duplicates='drop')
+
+
+rk_fig = report_graph(lgbmrank_v_model.portfolio_metric_dict['1day'][0])
+
+
+# 单独回测interday_lowvolatility_momentum因子
+score_df: pd.DataFrame = volatility_momentum.loc[
+    :, (slice("feature"), slice("interday_lowvolatility_momentum"))
+].copy()
+score_df.columns = ['score']
+
+
+lgbmrank_v_model.backtest(
+    pred_score=score_df, start_time=TARIN_PERIODS[0], end_time=TEST_PERIODS[1]
+)
+
+
+rk_fig = report_graph(lgbmrank_v_model.portfolio_metric_dict["1day"][0])
+
+
+# # 滚动训练
+
+from qlib.workflow import R
+from src.rolling import RollingBenchmark
+
+
+TRAIN_PERIODS: Tuple = ("2014-01-01", "2017-12-31")
+VALID_PERIODS: Tuple = ("2018-01-01", "2019-12-31")
+TEST_PERIODS: Tuple = ("2020-01-01", "2023-02-17")
+
+
+rolling_model = RollingBenchmark(
+    TRAIN_PERIODS,
+    VALID_PERIODS,
+    TEST_PERIODS,
+    factor_obj=SportBettingsFactor,
+    window=20,
+    step=20,
+    horizon=1,
+    exp_name="rolling_test",
+    rolling_exp="test",
+)
+rolling_model.run()
+
+
+# pred_df: pd.DataFrame = R.get_recorder(
+#     experiment_id="3", recorder_id="6210eef4630a4e33814a2c932d8be102"
+# ).load_object("pred.pkl")
+# label_df: pd.DataFrame = pd.read_pickle("data/pkl/all_data.pkl")[["next_ret"]].rename(
+#     columns={"next_ret": "label"}
+# )
+
+# pred_label_df: pd.DataFrame = pd.concat((label_df, pred_df), axis=1, sort=True).reindex(
+#     pred_df.index
+# )
+
+pred_label_df:pd.DataFrame = rolling_model.get_pred(experiment_id='3',recorder_id = '82b88a4264824dbebd747c7e3026cbf8')
+
+
+performance_graph = model_performance_graph(pred_label_df)

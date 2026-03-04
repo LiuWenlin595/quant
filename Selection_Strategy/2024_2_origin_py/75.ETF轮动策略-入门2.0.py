@@ -3,25 +3,28 @@
 # 作者：vzhb1998
 
 # -*- coding: utf-8 -*-
-# @author: zhangb
-# @qq：1337569005
-
-# 优化说明:
-#     1.使用修正标准分
-#         rsrs_score的算法有：
-#             仅斜率slope，效果一般；
-#             仅标准分zscore，效果不错；
-#             修正标准分 = zscore * r2，效果最佳;
-#             右偏标准分 = 修正标准分 * slope，效果不错。
-#     2.将原策略的每次持有两只etf改成只买最优的一个，收益显著提高
-#     3.将每周调仓换成每日调仓，收益显著提高
-#     4.因为交易etf，所以手续费设为万分之1，印花税设为零，未设置滑点
-#     5.修改股票池中候选etf，删除银行，红利等收益较弱品种，增加纳指etf以增加不同国家市场间轮动的可能性
-#     6.根据研报，默认参数介已设定为最优
-#     7.针对盈利分析发现沪深300etf不适用此策略，做优化调整
-#     8.添加北向策略对沪深300etf复合优化
-#     9.加入防未来函数
-#     10.增加择时与选股模块的打印日志，方便观察每笔操作依据
+"""
+@author: zhangb
+@qq：1337569005
+"""
+'''
+优化说明:
+    1.使用修正标准分
+        rsrs_score的算法有：
+            仅斜率slope，效果一般；
+            仅标准分zscore，效果不错；
+            修正标准分 = zscore * r2，效果最佳;
+            右偏标准分 = 修正标准分 * slope，效果不错。
+    2.将原策略的每次持有两只etf改成只买最优的一个，收益显著提高
+    3.将每周调仓换成每日调仓，收益显著提高
+    4.因为交易etf，所以手续费设为万分之1，印花税设为零，未设置滑点
+    5.修改股票池中候选etf，删除银行，红利等收益较弱品种，增加纳指etf以增加不同国家市场间轮动的可能性
+    6.根据研报，默认参数介已设定为最优
+    7.针对盈利分析发现沪深300etf不适用此策略，做优化调整
+    8.添加北向策略对沪深300etf复合优化
+    9.加入防未来函数
+    10.增加择时与选股模块的打印日志，方便观察每笔操作依据
+'''
 
 #导入函数库
 from jqdata import *
@@ -137,4 +140,253 @@ def get_timing_signal(stock):
     high_low_data = attribute_history(g.ref_stock, g.N, '1d', ['high', 'low'])
     intercept, slope, r2 = get_ols(high_low_data.low, high_low_data.high)
     g.slope_series.append(slope)
-    rsrs_score = get_zscore(g.slope
+    rsrs_score = get_zscore(g.slope_series[-g.M:]) * r2
+    #综合判断所有信号
+    if rsrs_score > g.score_threshold and today_MA > before_MA:
+        print('BUY')
+        return "BUY"
+    elif rsrs_score < -g.score_threshold and today_MA < before_MA:
+        print('SELL')
+        return "SELL"
+    else:
+        print('KEEP')
+        return "KEEP"
+
+#2-5 择时模块-对300ETF进行北向净值判断		
+#获取前一交易日北向资金流向，参数exp:2021-10-21
+def get_finance(context):
+    yesterday = context.previous_date
+    # print(today.date(),'@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
+
+    #20161205前北向资金为沪股通，20161205深股通数据
+    n_sh = finance.run_query(query(finance.STK_ML_QUOTA).filter(finance.STK_ML_QUOTA.day <= yesterday,
+                                                                finance.STK_ML_QUOTA.link_id == 310001).order_by(
+                                                                finance.STK_ML_QUOTA.day.desc()).limit(10))
+    if n_sh.empty:
+        return 0
+    n_sz = finance.run_query(query(finance.STK_ML_QUOTA).filter(finance.STK_ML_QUOTA.day <= yesterday,
+                                                                finance.STK_ML_QUOTA.link_id == 310002).order_by(
+                                                                finance.STK_ML_QUOTA.day.desc()).limit(10))
+    total_net_in = 0
+    if n_sz.empty:
+        for i in range(0, 1):
+            sh_in = n_sh['buy_amount'][i] - n_sh['sell_amount'][i]
+            total_net_in += sh_in
+    else:
+        for i in range(0, 1):
+            sh_in = n_sh['buy_amount'][i] - n_sh['sell_amount'][i]
+            sz_in = n_sz['buy_amount'][i] - n_sz['sell_amount'][i]
+            amount = sh_in + sz_in
+            total_net_in += amount
+    
+    g.north_money = total_net_in
+    g.Northbound.append(g.north_money)
+    new = sorted(g.Northbound)
+    #中位数
+    if (numpy.size(g.Northbound) >100): #前100天默认为15e且买入val>0
+        g.Northbound_val = new[numpy.size(new)//2]
+        if g.Northbound_val<5 :
+            g.Northbound_val = 5
+
+
+#3-1 过滤模块-过滤停牌股票
+#输入选股列表，返回剔除停牌股票后的列表
+def filter_paused_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list if not current_data[stock].paused]
+
+#3-2 过滤模块-过滤ST及其他具有退市标签的股票
+#输入选股列表，返回剔除ST及其他具有退市标签股票后的列表
+def filter_st_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list
+			if not current_data[stock].is_st
+			and 'ST' not in current_data[stock].name
+			and '*' not in current_data[stock].name
+			and '退' not in current_data[stock].name]
+
+#3-3 过滤模块-过滤涨停的股票
+#输入选股列表，返回剔除未持有且已涨停股票后的列表
+def filter_limitup_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	# 已存在于持仓的股票即使涨停也不过滤，避免此股票再次可买，但因被过滤而导致选择别的股票
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < current_data[stock].high_limit]
+
+#3-4 过滤模块-过滤跌停的股票
+#输入股票列表，返回剔除已跌停股票后的列表
+def filter_limitdown_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] > current_data[stock].low_limit]
+
+def getPreDayPrice(security):
+    # 获取前一日的收盘价格  
+    close_data = attribute_history(security, 1, '1d', ['close'])
+    current_price = close_data['close'][-1]
+    return current_price
+
+#4-0 价值下单转限价下单
+##打印账户指定代码的现价/当前价值/当前数量信息
+def print_code_info(context,code,value):
+    huadian=0.015
+    #持仓里面有这个代码，比较value和市值大小，判断买入卖出，以及报价，数量
+    for position in list(context.portfolio.positions.values()):
+        if str(position.security)==code :
+            print("已经存在持仓，进行调整！")
+            print('代码:{}'.format(position.security))
+            print('现价:{}'.format(position.price))
+            print('持仓(股):{}'.format(position.total_amount))
+            print('市值:{}'.format(format(position.value,'.2f')))
+            #清仓
+            if value == 0 :
+                account = position.total_amount*(-1)
+                price = round(position.price*(1-huadian),2)
+                print("清仓",code,account,price)
+                return order(code, account, LimitOrderStyle(price))
+            #不变
+            elif value == position.value:
+                print("无操作")
+            #加仓
+            elif value > position.value:
+                price = round(position.price*(1+huadian),2)
+                account = (value-position.total_amount)/price
+                print("加仓",code,account,price)
+                return order(code, account, LimitOrderStyle(price))
+            #减仓
+            elif value < position.value:
+                price = round(position.price*(1-huadian),2)
+                account = (value-position.total_amount)/price
+                print("减仓",code,account,price)
+                return order(code, account, LimitOrderStyle(price))
+            else:
+                print("异常情况")
+            return
+    #持仓里没有这个代码，根据value和现价进行0.05买入
+    price = round(getPreDayPrice(code)*(1+huadian),2)
+    account = value/price
+    print("建仓",code,account,price)
+    return order(code, account, LimitOrderStyle(price))
+
+#4-1 交易模块-自定义下单
+#报单成功返回报单(不代表一定会成交),否则返回None,应用于
+def order_target_value_(security, value ,context):
+	if value == 0:
+		log.debug("Selling out %s" % (security))
+	else:
+		log.debug("Order %s to value %f" % (security, value))
+	# 如果股票停牌，创建报单会失败，order_target_value 返回None
+	# 如果股票涨跌停，创建报单会成功，order_target_value 返回Order，但是报单会取消
+	# 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
+	
+	#获得持仓中对应代码的现价-当前价值-当前数量
+	return print_code_info(context,security,value)
+	
+	#return order_target_value(security, value)
+
+#4-2 交易模块-开仓
+#买入指定价值的证券,报单成功并成交(包括全部成交或部分成交,此时成交量大于0)返回True,报单失败或者报单成功但被取消(此时成交量等于0),返回False
+def open_position(security, value, context):
+	order = order_target_value_(security, value ,context)
+	if order != None and order.filled > 0:
+		return True
+	return False
+
+#4-3 交易模块-平仓
+#卖出指定持仓,报单成功并全部成交返回True，报单失败或者报单成功但被取消(此时成交量等于0),或者报单非全部成交,返回False
+def close_position(position ,context):
+	security = position.security
+	order = order_target_value_(security, 0,context)  # 可能会因停牌失败
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+			return True
+	return False
+
+#4-4 交易模块-调仓
+#当择时信号为买入时开始调仓，输入过滤模块处理后的股票列表，执行交易模块中的开平仓操作
+def adjust_position(context, buy_stocks):
+	for stock in context.portfolio.positions:
+		if stock not in buy_stocks:
+			log.info("[%s]已不在应买入列表中" % (stock))
+			position = context.portfolio.positions[stock]
+			close_position(position,context)
+		else:
+			log.info("[%s]已经持有无需重复买入" % (stock))
+	# 根据股票数量分仓
+	# 此处只根据可用金额平均分配购买，不能保证每个仓位平均分配
+	position_count = len(context.portfolio.positions)
+	if g.stock_num > position_count:
+		value = context.portfolio.cash / (g.stock_num - position_count)
+		for stock in buy_stocks:
+			if context.portfolio.positions[stock].total_amount == 0:
+				if open_position(stock, value, context):
+					if len(context.portfolio.positions) == g.stock_num:
+						break
+
+#4-5 交易模块-择时交易
+#结合择时模块综合信号进行交易
+def my_trade(context):
+    #获取选股列表并过滤掉:st,st*,退市,涨停,跌停,停牌
+    check_out_list = get_rank(g.stock_pool)
+    check_out_list = filter_st_stock(check_out_list)
+    check_out_list = filter_limitup_stock(context, check_out_list)
+    check_out_list = filter_limitdown_stock(context, check_out_list)
+    check_out_list = filter_paused_stock(check_out_list)
+    print('今日自选股:{}'.format(check_out_list))
+    #获取综合择时信号
+    timing_signal = get_timing_signal(g.ref_stock)
+    get_finance(context)
+    if '510300.XSHG' in check_out_list and g.north_money <=g.Northbound_val :
+        timing_signal = 'SELL'
+    print('今日择时信号:{}{}'.format(check_out_list,timing_signal))
+    #开始交易
+    if timing_signal == 'SELL' :
+        for stock in context.portfolio.positions:
+            position = context.portfolio.positions[stock]
+            close_position(position,context)
+    elif timing_signal == 'BUY' or timing_signal == 'KEEP':
+        adjust_position(context, check_out_list)
+    else:
+        pass
+
+#4-6 交易模块-止损
+#检查持仓并进行必要的止损操作
+def check_lose(context):
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount
+        #这里设定50%止损几乎等同不止损，因为止损在指数etf策略中影响不大
+        if ret <=-50:
+            order_target_value(position.security, 0)
+            print("！！！！！！触发止损信号: 标的={},标的价值={},浮动盈亏={}% ！！！！！！"
+                .format(securities,format(value,'.2f'),format(ret,'.2f')))
+
+#5-1 复盘模块-打印
+#打印每日持仓信息
+def print_trade_info(context):
+    #打印当天成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        print('成交记录：'+str(_trade))
+    #打印账户信息
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+    print('一天结束')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

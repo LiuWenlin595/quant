@@ -31,6 +31,9 @@
 # 
 # 基于此，我们可以设计球队硬币因子
 
+# In[1]: (已移除或注释)
+
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -51,10 +54,16 @@ import matplotlib.pyplot as plt
 from  matplotlib.figure import Figure
 
 
+# In[2]: (已移除或注释)
+
+
 df = pd.read_hdf("price_not_fq.hdf", key = 'data')
 df.sort_values(['code', 'time'], ascending=True, inplace = True)
 df = df.reset_index(drop = True)
 df
+
+
+# In[3]: (已移除或注释)
 
 
 def show_mom_back(my_df, fac_col:str, ret_col:str) -> pd.DataFrame:
@@ -99,6 +108,9 @@ def show_mom_back(my_df, fac_col:str, ret_col:str) -> pd.DataFrame:
     return draw_df
 
 
+# In[4]: (已移除或注释)
+
+
 def show_tactic(df):
     # fig = Figure(figsize=(20, 10))
     df["time"] = pd.to_datetime(df["time"])
@@ -110,6 +122,9 @@ def show_tactic(df):
     axes[1].hist(df["net_mom_ratio"], bins = 10)
     axes[1].set_title("net_mom_ratio distribution")
     plt.show()
+
+
+# In[5]: (已移除或注释)
 
 
 def show(df, Name, Type = 0):
@@ -165,6 +180,9 @@ def show(df, Name, Type = 0):
 # 
 # 用传统的过去一段时间的收益率作为因子。
 
+# In[6]: (已移除或注释)
+
+
 def calc_ret(df):
     g = df.rolling(20)["ret"].apply(np.prod)
     df["ret_20"] = g
@@ -177,6 +195,10 @@ df["ret_20"] -= 1
 df["ret_20_after"] = df.groupby("code")["ret_20"].shift(-20)
 df = df.reset_index(drop = True)
 df
+
+
+# In[7]: (已移除或注释)
+
 
 
 tradtion_tactic = show_mom_back(df, fac_col = "ret_20", ret_col = "ret_20_after")
@@ -197,12 +219,18 @@ show(tradtion_tactic_df, "tradition_tactic", Type = 1)
 # 
 # 对于硬币型股票，我们认为后续更可能发生动量效应，我们令其因子值乘以 -1，对于球队型股票，我们认为后续更可能发生反转，因子值不变
 
+# In[8]: (已移除或注释)
+
+
 # 首先我们来计算过去 20 天的日收益率的 std
 def calc_vol(df):
     g = df.rolling(20)["ret"].apply(np.std)
     df["Vol_between_day"] = g
     return df
 df = df.groupby("code").apply(calc_vol)
+
+
+# In[9]: (已移除或注释)
 
 
 # 因为有很多小市值的股票，所以直接用 指数的 波动率是不太合适的，这里直接使用全市场的截面数据
@@ -229,6 +257,9 @@ show(tactic_1_df, "fac1", Type = 1)
 # 
 # 将每只股票的换手率变化量与当日全市场的换手率变化量的均值做比较，我们认为换手率变化量高于市场均值的 股票为 球队型股票， 其未来将大概率发生 反转 效应 ；换手率变化量低于市场均值的为 硬币 股票，未来将大概率 发生动量 效应 。
 
+# In[10]: (已移除或注释)
+
+
 # 先把流通股和行情数据 merge 一下
 # 我这里的 float_share 是流通股本，单位是 万股， 所以看到的数据其实是 万分之多少
 cap_df = pd.read_hdf("fin_df.hdf", key = 'data')
@@ -238,6 +269,9 @@ df["time"] = pd.to_datetime(df["time"])
 df = pd.merge(df, cap_df, on = ["code", "time"], how = 'left')
 df["turnover_rate"] = df["volume"] / df["float_share"] 
 df.drop("float_share", axis = 1, inplace = True)
+
+
+# In[13]: (已移除或注释)
 
 
 df["turnover_rate_change"] = df.groupby("code")["turnover_rate"].apply(lambda x: x - x.shift(1)) 
@@ -269,6 +303,9 @@ show(tactic_2_df, "fac2", Type = 1)
 # 
 # 接下来将两个因子等权合成，合成为 修正 - 日间收益率因子
 
+# In[14]: (已移除或注释)
+
+
 def z_score(g):
     return (g - g.mean()) / g.std()
 
@@ -294,6 +331,9 @@ show(tactic_3_df, "corrected_ret_fac", Type = 1)
 # 
 # 先来看看传统日内反转因子的表现
 
+# In[15]: (已移除或注释)
+
+
 def calc_in_day_ret_mean(df):
     g = df.rolling(20)["ret_in_day"].apply(np.mean)
     df["ret_in_day_20"] = g
@@ -316,6 +356,9 @@ show(tradtion_in_day_tactic_df, "tradition_in_day_tactic", Type = 1)
 # 
 # 将球队型股票的过去20日平均日内收益乘以 1，硬币型股票的乘以 -1 ，得到日内收益率波动率的可知性因子
 
+# In[16]: (已移除或注释)
+
+
 # 首先我们来计算过去 20 天的日内收益率的 std
 def calc_vol(df):
     g = df.rolling(20)["ret_in_day"].apply(np.std)
@@ -336,4 +379,183 @@ df["fac3"] = df["ret_20"] * df["flag"]
 tactic_3 = show_mom_back(df, fac_col = "fac3", ret_col = "ret_20_after")
 show_tactic(tactic_3)
 tactic_3_df = back_trade(df[["time", "code", "fac3"]], tar_col = "fac3")
-show(tactic_3_
+show(tactic_3_df, "fac3", Type = 1)
+
+
+# 表现还算可以把，至少没有大规模回车，但是看起来中间某段时间的适用性不是非常好
+# 
+# 怪不得研报不放日内改进前的多空收益比TAT，原来他这个改进多空收益上表现确实一般
+# 
+# 但是从净动量比例来看，明显下降了，说明还是对动量效应和反转效应做了更准确的预测
+
+# #### 日内收益率 - 换手率的可知性
+# 
+# 和上面的处理方式是一样的，这里就不多说了
+
+# In[17]: (已移除或注释)
+
+
+df["flag"] = df.apply(lambda x: 1 if x["turnover_rate_change"] > x["turnover_rate_change_mean"] else -1, axis = 1)
+df["my_ret"] = df.apply(lambda x: (x["ret_in_day"]) * x["flag"], axis = 1)
+
+def calc_fac4(df):
+    g = df.rolling(20)["my_ret"].apply(np.mean)
+    df["fac4"] = g
+    return df
+
+df = df.groupby("code").apply(calc_fac4)
+
+tactic_4 = show_mom_back(df, fac_col = "fac4", ret_col = "ret_20_after")
+show_tactic(tactic_4)
+tactic_4_df = back_trade(df[["time", "code", "fac4"]], tar_col = "fac4")
+show(tactic_4_df, "fac4", Type = 1)
+
+
+# 但是这个改进是有价值的，多空收益变得稳定了，体现到投资组合上表现为胜率变高了
+# 
+# 多空收益的下降一定程度上是因为我们把一些原本属于动量效应的股票识别为了反转效应，导致了多空收益的下降
+
+# #### 修正 - 日内收益率因子
+# 
+# 和前面一样，将波动率的和换手率的两个因子合成成一个因子即可
+
+# In[18]: (已移除或注释)
+
+
+df["fac3_z"] = df.groupby("time")["fac3"].apply(z_score)
+df["fac4_z"] = df.groupby("time")["fac4"].apply(z_score)
+df["corrected_ret_fac_in_day"] = df["fac3_z"] + df["fac4_z"]
+
+tactic_in_day = show_mom_back(df, fac_col = "corrected_ret_fac_in_day", ret_col = "ret_20_after")
+show_tactic(tactic_in_day)
+tactic_in_day_df = back_trade(df[["time", "code", "corrected_ret_fac_in_day"]], tar_col = "corrected_ret_fac_in_day")
+show(tactic_in_day_df, "corrected_ret_fac_in_day", Type = 1)
+
+
+# 也可以看成是非常稳定的因子了
+
+# #### 隔夜收益率的可知性
+# 
+# 除日间收益率、日内收益率外，隔夜收益率也受到投资者较高的关注，我们参考传统日间反转因子构建方式，构建传统隔夜涨跌因子：
+# 
+# 计算每只股票t 日的隔夜收益率，即使用t 日开盘价除以t-1 日的收盘价再减1。
+# 
+# 计算过去20 个交易日的隔夜收益率的平均值，记为本月的传统隔夜涨跌因子.
+# 
+# 注意这个因子的逻辑是，距离均值太小或者太大都不好，也就是两端差，中间好。
+# 
+# 因为距离均值过远说明他的可知性相对较差，投资者每天都要分析是否会存在高开或者低开的现象，而几乎每天都是平开的股票则说明其可知性较高，投资者可以更加容易地做出决策。
+# 
+# 我们可以直接对因子值取绝对值，来进行判断
+
+# In[23]: (已移除或注释)
+
+
+def calc_between_ret_mean(df):
+    g = df.rolling(20)["ret_between_day"].apply(np.mean)
+    df["ret_between_day_20"] = np.abs(g)
+    return df
+
+
+df["ret_between_day"] = df["open"] / df["pre_close"] - 1
+df = df.groupby("code").apply(calc_between_ret_mean)
+
+tradtion_between_tactic = show_mom_back(df, fac_col = "ret_between_day_20", ret_col = "ret_20_after")
+show_tactic(tradtion_between_tactic)
+tradtion_between_tactic_df = back_trade(df[["time", "code", "ret_between_day_20"]], tar_col = "ret_between_day_20")
+show(tradtion_between_tactic_df, "ret_between_day_20", Type = 1)
+
+
+# 看起传统的日间收益表现起来不太好。均净动量比例除以稳净动量比例的值也相对比较小
+# 
+# #### 隔夜收益率波动率的可知性
+# 
+# 首先要计算过去20 个交易日的隔夜收益率的标准差，记为本月的隔夜收益率波动率因子
+# 
+# 同样，我们以隔夜收益率波动率小于市场均值的股票为硬币型股票，波动率大于市场均值的股票为球队型股票，
+# 
+# 将球队型股票的过去20日平均隔夜收益乘以 1，硬币型股票的乘以 -1 ，得到隔夜收益率波动率的可知性因子
+
+# In[27]: (已移除或注释)
+
+
+# 首先我们来计算过去 20 天的隔夜收益率的 std
+
+def calc_after_night_vol(df):
+    g = df.rolling(20)["ret_between_day"].apply(np.std)
+    df["Vol_after_night"] = g
+    return df
+
+df = df.groupby("code").apply(calc_after_night_vol)
+
+# 然后我们来计算过去 20 天的隔夜收益率std的均值
+
+g = df.groupby("time", as_index = False)["Vol_after_night"].mean()
+g.columns = ["time", "market_avg_vol_after_night"]
+df = pd.merge(df, g, on = 'time', how = 'left')
+
+df["flag"] = df.apply(lambda x: 1 if x["Vol_after_night"] > x["market_avg_vol_after_night"] else -1, axis = 1)
+df["fac5"] = df["ret_between_day_20"] * df["flag"]
+df["fac5"] = np.abs(df["fac5"])
+
+tactic_5 = show_mom_back(df, fac_col = "fac5", ret_col = "ret_20_after")
+show_tactic(tactic_5)
+tactic_5_df = back_trade(df[["time", "code", "fac5"]], tar_col = "fac5")
+show(tactic_5_df, "fac5", Type = 1)
+
+
+# #### 隔夜收益率 - 换手率的可知性
+# 
+# 同样，我们可以计算出换手率的可知性因子
+
+# In[28]: (已移除或注释)
+
+
+df["flag"] = df.apply(lambda x: 1 if x["turnover_rate_change"] > x["turnover_rate_change_mean"] else -1, axis = 1)
+df["my_ret"] = df.apply(lambda x: (x["ret_between_day"]) * x["flag"], axis = 1)
+
+def calc_fac6(df):
+    g = df.rolling(20)["my_ret"].apply(np.mean)
+    df["fac6"] = np.abs(g)
+    return df
+
+df = df.groupby("code").apply(calc_fac6)
+tactic_6 = show_mom_back(df, fac_col = "fac6", ret_col = "ret_20_after")
+show_tactic(tactic_6)
+tactic_6_df = back_trade(df[["time", "code", "fac6"]], tar_col = "fac6")
+show(tactic_6_df, "fac6", Type = 1)
+
+
+# #### 修正 - 隔夜收益率因子
+# 
+# 最后，我们将两个因子合成，得到修正 - 隔夜收益率因子
+
+# In[29]: (已移除或注释)
+
+
+df["fac5_z"] = df.groupby("time")["fac5"].apply(z_score)
+df["fac6_z"] = df.groupby("time")["fac6"].apply(z_score)
+df["corrected_ret_fac_after_night"] = df["fac5_z"] + df["fac6_z"]
+
+tactic_after_night = show_mom_back(df, fac_col = "corrected_ret_fac_after_night", ret_col = "ret_20_after")
+show_tactic(tactic_after_night)
+tactic_after_night_df = back_trade(df[["time", "code", "corrected_ret_fac_after_night"]], tar_col = "corrected_ret_fac_after_night")
+show(tactic_after_night_df, "corrected_ret_fac_after_night", Type = 1)
+
+
+# #### 修正 - 动量反转因子
+# 
+# 最后，我们将所有六个因子合成，得到我们的修正 - 动量反转因子
+
+# In[31]: (已移除或注释)
+
+
+df["final_factor"] = df["corrected_ret_fac"] + df["corrected_ret_fac_in_day"] + df["corrected_ret_fac_after_night"]
+
+tactic_final = show_mom_back(df, fac_col = "final_factor", ret_col = "ret_20_after")
+show_tactic(tactic_final)
+tactic_final_df = back_trade(df[["time", "code", "final_factor"]], tar_col = "final_factor")
+show(tactic_final_df, "final_factor", Type = 1)
+
+
+# In[ ]: (已移除或注释)

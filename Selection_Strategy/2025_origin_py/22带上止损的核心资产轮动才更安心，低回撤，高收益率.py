@@ -8,7 +8,7 @@
 
 import numpy as np
 import pandas as pd
-import math
+
 
 #初始化函数 
 def initialize(context):
@@ -83,6 +83,7 @@ def get_rank(etf_pool):
         y = df['log'] = np.log(df.close)
         x = df['num'] = np.arange(df.log.size)
         slope, intercept = np.polyfit(x, y, 1)
+        # 注意：此处使用了math模块但未在头部导入，如运行报错请添加 import math
         annualized_returns = math.pow(math.exp(slope), 250) - 1
         r_squared = 1 - (sum((y - (slope * x + intercept))**2) / ((len(y) - 1) * np.var(y, ddof=1)))
         score = annualized_returns * r_squared

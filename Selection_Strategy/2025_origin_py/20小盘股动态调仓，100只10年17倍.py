@@ -6,11 +6,9 @@ import pandas as pd
 import datetime as dt
 import json
 
-
 pd.set_option('display.width', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
-
 
 funds = [
     '159650.XSHE', # 国开ETF
@@ -20,15 +18,12 @@ funds = [
     '513300.XSHG', # 纳指100
     ]
 
-
 # report
 for s in funds:
     print(s, get_security_info(s).display_name)
 
-
 # save
 write_file('funds', json.dumps(funds))
-
 
 # load
 _funds = json.loads(read_file('funds'))

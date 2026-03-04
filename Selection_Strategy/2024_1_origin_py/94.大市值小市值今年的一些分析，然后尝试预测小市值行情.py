@@ -250,7 +250,6 @@ else:
     print("不存在对冲关系")
     
 
-
 today = datetime.datetime.today()
 date_str = today.strftime("%Y%m%d")  #  日期信息创建三个新特征并将它们连接起来形成特征矩阵来预处理数据XX。
 base = int(datetime.datetime.strptime(date_str, "%Y%m%d").timestamp())  #  当前日期的时间戳，用于一些与时间相关的计算。
@@ -340,4 +339,77 @@ for i in Y_date:
 
 future_dates_str = pd.Series(future).str.replace('-', '')  #  格式化字符串中的破折号将替换为空字符串
 X_x = future_dates_str.apply(lambda x: change1(x)).values.reshape(-1, 1)  #  使用相同的函数转换未来日期的特征
-X_month_day_x = future_dates_str.apply(lambda x: change2(x)).values.reshape(-1, 1
+X_month_day_x = future_dates_str.apply(lambda x: change2(x)).values.reshape(-1, 1)
+X_week_day_x = future_dates_str.apply(lambda x: change3(x)).values.reshape(-1, 1)
+XXX = np.concatenate((X_x, X_week_day_x, X_month_day_x), axis=1)  #  未来日期 ( ) 的转换后的特征XXX被连接起来
+last_column = result[-1:, ]  #  数组的最后一列result重复 5 次，为将来的预测做准备
+repeated_last_column = np.tile(last_column, (5, 1))
+result = repeated_last_column
+
+XXX = np.concatenate((XXX, result), axis=1)  #  重复的最后一列与转换后的未来日期特征连接起来
+R1=[]  #  空列表R1和R2被初始化以存储预测值
+R2=[]
+
+#  经过训练的 XGBoost 回归模型 ( models1) 来预测 中的未来日期XXX
+for i in range(5):  #  循环迭代 5 个未来日期，对于每个日期，使用相应的模型(models1[i])根据中的特征进行预测XXX[i]
+    pred1 = models1[i].predict(XXX[i].reshape(1, -1))
+    R1.append(pred1)  #  预测 ( pred1) 被附加到列表中R1
+
+
+Y0 = np.array(df['date'][-30:])  #  提取原始数据集中的最后 30 个日期，并计算“开盘价”和“收盘价”的平均值 ( y1)。
+y1 = (np.array(df['open'][-30:])+np.array(df['close'][-30:]))/2
+
+
+#  使用键“日期”和“价格”创建名为的字典data。它将过去 30 个日期和未来日期及其相应的预测价格结合起来。
+data = {
+    'date': np.concatenate([Y0, np.array(future_dates_str)]),
+    'price': np.concatenate([y1, np.squeeze(np.array(R1))]),
+}  
+
+data = pd.DataFrame(data)
+
+#  函数detect_via_cusum_lg来使用带有日志返回的累积和 (CUSUM) 来检测时间序列
+def detect_via_cusum_lg(ts, istart=30, threshold_times=5):
+    S_h = 0
+    S_l = 0
+    S_list = np.zeros(istart)  #  每次迭代，它都会计算过去几天对数返回的平均值和标准差istart
+    for i in range(istart+1, len(ts)-1):  #  函数采用时间序列ts作为输入，以及可选参数istart（计算过去的天数）和threshold_times（标准差阈值的乘数）。从索引开始迭代时间序列istart+1
+        meanArray = talib.SMA(ts[i-istart:i],timeperiod = istart)       #  计算istart时间至今均线
+        stdArray = talib.STDDEV(np.log(ts[i-istart:i]/meanArray[- 1]))  #  计算istart时间至今对数收益率的标准差。
+        #滑窗至i，避免读到未来数据[i-istart:i]
+        tslog = np.log(ts[i] / meanArray[- 1])
+        #计算当前时点相对于历史时间序列的均值的对数收益率
+        S_h_ = max(0, S_h + tslog - stdArray[-1])  #  初始化累积和变量 (S_h和S_l) 以及用于存储检测到的信号的列表 ( S_list)
+        S_l_ = min(0, S_l + tslog + stdArray[-1])
+        #计算上下边界
+        if S_h_> threshold_times * stdArray[-1]: #  上边界超过了设定的阈值（threshold_times倍的历史标准差）
+            S_list = np.append(S_list,1)         #  上升
+        elif abs(S_l_)> threshold_times *  stdArray[-1]:  #  下边界绝对值超过了设定的阈值（threshold_times倍的历史标准差）
+            S_list = np.append(S_list, -1)
+        else:
+            S_list = np.append(S_list, 0)  #  如果上下边界都没有超过阈值，则在 S_list 中追加值 0，表示无信号。没变点
+    return S_list
+
+dt0 = np.array(data["price"])
+
+#  可视化时间序列数据中识别的向上和向下信号
+listup,listdown = [],[]  #  初始化两个空列表（listup和）来存储出现向上和向下信号的索引
+s_list = detect_via_cusum_lg(dt0,istart=5, threshold_times=0.1)  #  循环迭代二进制信号列表 ( s_list) 并收集信号出现的索引
+for i in range(0,len(s_list)):
+    if s_list[i] == 1:
+        listup.append(i)
+    elif s_list[i] == -1 :
+        listdown.append(i)
+plt.figure(figsize=(10, 5))      #  生成画布
+plt.plot(dt0, color='y', lw=2.)  #  时间序列数据用向上和向下信号绘制，分别用“^”和“v”标记
+plt.plot(dt0, '^', markersize=5, color='r', label='买入信号 UP signal', markevery=listup)
+plt.plot(dt0, 'v', markersize=5, color='g', label='卖出信号 DOWN signal', markevery=listdown)
+plt.axvline(x=29, color='r', linestyle='--')  #  索引 29 处添加虚线，用于分隔过去和未来的数据。
+
+
+plt.xlabel('时间序列：历史 30 天 + 未来 5 天', fontsize=16) 
+plt.ylabel('指数点位', fontsize=16) 
+plt.title(f'{current_time}    AI 预测微盘股未来 5 天趋势（红色虚线后）', fontsize=16)
+plt.grid(visible=True, linestyle='--')
+plt.legend(loc='best')
+plt.show()

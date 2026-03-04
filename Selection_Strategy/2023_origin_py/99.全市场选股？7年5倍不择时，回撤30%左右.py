@@ -1,8 +1,3 @@
-import jqdata
-from jqlib.technical_analysis  import *
-from jqdata import *
-import warnings
-
 # 克隆自聚宽文章：https://www.joinquant.com/post/35307
 # 标题：全市场选股？7年5倍不择时，回撤30%左右
 # 作者：Jacobb75
@@ -18,6 +13,12 @@ import warnings
 # 克隆自聚宽文章：https://www.joinquant.com/post/34862
 # 标题：ROE+PB模型的优化
 # 作者：wywy1995
+
+# 导入函数库
+import jqdata
+from jqlib.technical_analysis  import *
+from jqdata import *
+import warnings
 
 # 初始化函数
 def initialize(context):
@@ -262,4 +263,5 @@ def adjust_position(context, buy_stocks):
         for stock in buy_stocks:
             if stock not in context.portfolio.positions:
                 order_target_value(stock, value)
-                if len(context.portfolio.positions) ==
+                if len(context.portfolio.positions) == g.stock_num:
+                    break

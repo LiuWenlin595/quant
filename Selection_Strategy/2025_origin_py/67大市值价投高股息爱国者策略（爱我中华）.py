@@ -140,4 +140,142 @@ def get_dividend_ratio_filter_list(context, stock_list, sort, p1, p2):
     if list_len > interval:
         df_num = list_len // interval
         for i in range(df_num):
-            q = query(finance.STK_XR_XD.code, finance.
+            q = query(finance.STK_XR_XD.code, finance.STK_XR_XD.a_registration_date,  finance.STK_XR_XD.bonus_amount_rmb
+            ).filter(
+                finance.STK_XR_XD.a_registration_date >= time0,
+                finance.STK_XR_XD.a_registration_date <= time1,
+                finance.STK_XR_XD.code.in_(stock_list[interval*(i+1):min(list_len,interval*(i+2))]))
+            temp_df = finance.run_query(q)
+            df = df.append(temp_df)
+    dividend = df.fillna(0)#df.fillna() 是一个 Pandas 数据处理库中的函数，它可以用来填充数据框中的空值
+    dividend = dividend.groupby('code').sum()
+    temp_list = list(dividend.index) #query查询不到无分红信息的股票，所以temp_list长度会小于stock_list
+    # #获取市值相关数据
+    q = query(valuation.code,valuation.market_cap).filter(valuation.code.in_(temp_list))
+    cap = get_fundamentals(q, date=time1)
+    cap = cap.set_index('code')
+    # #计算股息率
+    cap['dividend_ratio']=(dividend['bonus_amount_rmb']/10000)/cap['market_cap']
+    # #排序并筛选
+    cap = cap.sort_values(by=['dividend_ratio'], ascending=sort)
+    final_list = list(cap.index)[int(p1*len(cap)):int(p2*len(cap))]
+    # print("近3年累计分红率排名前{0:.2%}的股有{1}只".format(p2,len(final_list)))
+    return final_list
+def GGX_stock(context, stock_list):
+    current_data = get_current_data()
+    LIST = get_dividend_ratio_filter_list(context, stock_list, False, 0, 0.5)
+    return LIST
+def check_limit_up(context):
+    now_time = context.current_dt
+    if g.yesterday_HL_list != []:
+        # 对昨日涨停股票观察到尾盘如不涨停则提前卖出，如果涨停即使不在应买入列表仍暂时持有
+        for stock in g.yesterday_HL_list:
+            current_data = get_price(stock, end_date=now_time, frequency='1m', fields=['close', 'high_limit'],
+                                     skip_paused=False, fq='pre', count=1, panel=False, fill_paused=True)
+            if current_data.iloc[0, 0] < current_data.iloc[0, 1]:
+                log.info("[%s]涨停打开，卖出" % (stock))
+                position = context.portfolio.positions[stock]
+                close_position(position)
+            else:
+                log.info("[%s]涨停，继续持有" % (stock))
+
+def filter_all_stock2(context, stock_list):
+    # 过滤次新股（新股、老股的分界日期，两种指定方法）
+    # 新老股的分界日期, 自然日180天
+    # by_date = context.previous_date - datetime.timedelta(days=180)
+    # 新老股的分界日期，120个交易日
+    by_date = get_trade_days(end_date=context.previous_date, count=375)[0]
+    all_stocks = get_all_securities(date=by_date).index.tolist()
+    stock_list = list(set(stock_list).intersection(set(all_stocks)))
+
+    curr_data = get_current_data()
+    return [stock for stock in stock_list if not (
+            stock.startswith(( '3','68', '4', '8')) or  # 创业，科创，北交所
+            curr_data[stock].paused or
+            curr_data[stock].is_st or  # ST
+            ('ST' in curr_data[stock].name) or
+            ('*' in curr_data[stock].name) or
+            ('退' in curr_data[stock].name) or
+            (curr_data[stock].day_open == curr_data[stock].high_limit) or  # 涨停开盘, 其它时间用last_price
+            (curr_data[stock].day_open == curr_data[stock].low_limit)  # 跌停开盘, 其它时间用last_price
+    )]
+
+
+def order_target_value_(security, value):
+    if value == 0:
+        log.debug("Selling out %s" % (security))
+    else:
+        log.debug("Order %s to value %f" % (security, value))
+    return order_target_value(security, value)
+
+
+
+def open_position(security, value):
+    order = order_target_value_(security, value)
+    if order != None and order.filled > 0:
+        return True
+    return False
+
+
+
+def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+
+# 4-2 清仓后次日资金可转
+def close_account(context):
+    if g.no_trading_today_signal == True:
+        if len(g.hold_list) != 0:
+            for stock in g.hold_list:
+                position = context.portfolio.positions[stock]
+                close_position(position)
+                log.info("卖出[%s]" % (stock))
+
+# 2-1 过滤停牌股票
+def filter_paused_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list if not current_data[stock].paused]
+
+# 2-2 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list
+            if not current_data[stock].is_st
+            and 'ST' not in current_data[stock].name
+            and '*' not in current_data[stock].name
+            and '退' not in current_data[stock].name]
+
+
+# 2-3 过滤科创北交股票
+def filter_kcbj_stock(stock_list):
+    for stock in stock_list[:]:
+        if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68' or stock[0] == '3':
+            stock_list.remove(stock)
+    return stock_list
+
+
+# 2-4 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    current_data = get_current_data()
+    return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+            or last_prices[stock][-1] < current_data[stock].high_limit]
+
+
+# 2-5 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    current_data = get_current_data()
+    return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+            or last_prices[stock][-1] > current_data[stock].low_limit]
+
+
+# 2-6 过滤次新股
+def filter_new_stock(context, stock_list):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if
+            not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=375)]

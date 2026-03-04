@@ -272,4 +272,74 @@ def ffscore_stock(context,score,security_list,date):
         return x.iloc[:-1].mean()
     def val_1(x):
         return x.iloc[-1]
-    def val_
+    def val_2(x):
+        if len(x.index) > 1:
+            return x.iloc[-2]
+        else:
+            return nan
+    # 扣非利润
+    adjusted_profit_ttm = h.groupby('code')['adjusted_profit'].apply(ttm_sum)
+    adjusted_profit_ttm_pre = h.groupby('code')['adjusted_profit'].apply(pre_ttm_sum)
+    # 总资产平均
+    total_assets_avg = h.groupby('code')['total_assets'].apply(ttm_avg)
+    total_assets_avg_pre = h.groupby('code')['total_assets'].apply(pre_ttm_avg)
+    # 经营活动产生的现金流量净额
+    net_operate_cash_flow_ttm = h.groupby('code')['net_operate_cash_flow'].apply(ttm_sum)
+    # 长期负债率: 长期负债/总资产
+    long_term_debt_ratio = h.groupby('code')['total_non_current_liability'].apply(val_1) / h.groupby('code')['total_assets'].apply(val_1)
+    long_term_debt_ratio_pre = h.groupby('code')['total_non_current_liability'].apply(val_2) / h.groupby('code')['total_assets'].apply(val_2)
+    # 流动比率：流动资产/流动负债
+    current_ratio = h.groupby('code')['total_current_assets'].apply(val_1) / h.groupby('code')['total_current_liability'].apply(val_1)
+    current_ratio_pre = h.groupby('code')['total_current_assets'].apply(val_2) / h.groupby('code')['total_current_liability'].apply(val_2)
+    # 营业收入
+    operating_revenue_ttm = h.groupby('code')['operating_revenue'].apply(ttm_sum)
+    operating_revenue_ttm_pre = h.groupby('code')['operating_revenue'].apply(pre_ttm_sum)
+    # 营业成本
+    operating_cost_ttm = h.groupby('code')['operating_cost'].apply(ttm_sum)
+    operating_cost_ttm_pre = h.groupby('code')['operating_cost'].apply(pre_ttm_sum)
+    # 1. ROA 资产收益率
+    roa = adjusted_profit_ttm / total_assets_avg
+    roa_pre = adjusted_profit_ttm_pre / total_assets_avg_pre
+    # 2. OCFOA 经营活动产生的现金流量净额/总资产
+    ocfoa = net_operate_cash_flow_ttm / total_assets_avg
+    # 3. ROA_CHG 资产收益率变化
+    roa_chg = roa - roa_pre
+    # 4. OCFOA_ROA 应计收益率: 经营活动产生的现金流量净额/总资产 -资产收益率
+    ocfoa_roa = ocfoa - roa
+    # 5. LTDR_CHG 长期负债率变化 (长期负债率=长期负债/总资产)
+    ltdr_chg = long_term_debt_ratio - long_term_debt_ratio_pre
+    # 6. CR_CHG 流动比率变化 (流动比率=流动资产/流动负债)
+    cr_chg = current_ratio - current_ratio_pre
+    # 8. GPM_CHG 毛利率变化 (毛利率=1-营业成本/营业收入)
+    gpm_chg = operating_cost_ttm_pre/operating_revenue_ttm_pre - operating_cost_ttm/operating_revenue_ttm
+    # 9. TAT_CHG 资产周转率变化(资产周转率=营业收入/总资产)
+    tat_chg = operating_revenue_ttm/total_assets_avg - operating_revenue_ttm_pre/total_assets_avg_pre
+    spo_list = list(set(finance.run_query(
+        query(
+            finance.STK_CAPITAL_CHANGE.code
+        ).filter(
+            finance.STK_CAPITAL_CHANGE.code.in_(security_list),
+            finance.STK_CAPITAL_CHANGE.pub_date.between(one_year_ago, my_watch_date),
+            finance.STK_CAPITAL_CHANGE.change_reason_id == 306004)
+    )['code']))
+    spo_score = pd.Series(True, index = security_list)
+    if spo_list:
+        spo_score[spo_list] = False
+    df_scores = pd.DataFrame(index=security_list)# 1
+    df_scores['roa'] = roa>0.0 #赚钱能力强于国债# 2
+    df_scores['ocfoa'] = ocfoa>0# 3
+    df_scores['roa_chg'] = roa_chg>0# 4
+    df_scores['ocfoa_roa'] = ocfoa_roa>0# 5
+    df_scores['ltdr_chg'] = ltdr_chg<=0# 6
+    df_scores['cr_chg'] = cr_chg>0# 7
+    df_scores['spo'] = spo_score  > 0# 8
+    df_scores['gpm_chg'] = gpm_chg>0# 9
+    df_scores['tat_chg'] = tat_chg>0# 合计
+    df_scores = df_scores.dropna()
+    df_scores['total'] = df_scores['roa'] + df_scores['ocfoa'] + df_scores['roa_chg'] + \
+        df_scores['ocfoa_roa'] + df_scores['ltdr_chg'] + df_scores['cr_chg'] + \
+        df_scores['spo'] + df_scores['gpm_chg'] + df_scores['tat_chg']
+    res  = df_scores.loc[lambda df_scores: df_scores['total'] > score].sort_values(by = 'total',ascending=False).index
+    q = get_fundamentals(query(indicator.code,indicator.roe).filter(indicator.code.in_(res)).order_by(indicator.roe.desc()).limit(len(res)))
+    res = list(q['code'])
+    return res

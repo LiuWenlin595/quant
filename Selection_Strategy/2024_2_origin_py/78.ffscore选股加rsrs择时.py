@@ -394,4 +394,144 @@ def check_stock(context,security_list):
     
     # 合计
     df_scores = df_scores.dropna()
-    df_scores['total'] = df_scores['roa'] + df_scores['ocfoa'] + df_scores['roa_
+    df_scores['total'] = df_scores['roa'] + df_scores['ocfoa'] + df_scores['roa_chg'] + \
+        df_scores['ocfoa_roa'] + df_scores['ltdr_chg'] + df_scores['cr_chg'] + \
+        df_scores['spo'] + df_scores['gpm_chg'] + df_scores['tat_chg']
+    res  = df_scores.loc[lambda df_scores: df_scores['total'] > g.score].sort_values(by = 'total',ascending=False).index
+    
+    
+    
+    # 升序	asc()
+    # 降序	desc()
+    
+    # 市值排序：
+    # q = get_fundamentals(query(
+    #     valuation.code, valuation.market_cap, valuation.circulating_market_cap,valuation.pb_ratio,valuation.pe_ratio
+    #     ).filter(valuation.code.in_(res)
+    #     ).order_by(valuation.market_cap.asc()).limit(len(res)))
+
+    # roe 排序：
+    q = get_fundamentals(query(
+             indicator.code,indicator.roe
+          ).filter(
+             indicator.code.in_(res)
+          ).order_by(indicator.roe.desc()).limit(len(res)))
+
+    res = list(q['code'])
+    # record(total = len(res),hold_num = len(context.portfolio.positions.keys()))
+    return res
+
+def kickout(context,stocklist):
+     #钢铁 	有色金属I 房地产  
+     #金融服务 国防军工I 传媒I 
+    z_list = []
+    # stock_sw1 = get_industry_stocks('801040') + get_industry_stocks('801050') + get_industry_stocks('801180') + \
+    #             get_industry_stocks('801190') + get_industry_stocks('801740') + get_industry_stocks('801760') +	\
+    #             get_industry_stocks('801950') + get_industry_stocks('801960') + get_industry_stocks('801790')	
+    stock_sw1 = get_industry_stocks('801180')
+    for s in stocklist:
+        if s not in stock_sw1:
+            z_list.append(s)
+        else:
+            pass
+    return z_list
+############################# rsrs函数 #############################
+# 这里求R2的式子有点问题，但是这个效果更好，原因未找到！
+def get_ols(x, y):
+    slope, intercept = np.polyfit(x, y, 1)
+    r2 = 1 - (sum((y - (slope * x + intercept))**2) / ((len(y) - 1) * np.var(y, ddof=1)))
+    return (intercept, slope, r2)
+
+def initial_slope_series():
+    data = attribute_history(g.ref_stock, g.N + g.M, '1d', ['high', 'low'])
+    return [get_ols(data.low[i:i+g.N], data.high[i:i+g.N])[1] for i in range(g.M)]
+
+# 因子标准化
+def get_zscore(slope_series):
+    mean = np.mean(slope_series)
+    std = np.std(slope_series)
+    return (slope_series[-1] - mean) / std
+
+# 只看RSRS因子值作为买入、持有和清仓依据，前版本还加入了移动均线的上行作为条件
+def get_timing_signal(context,stock):
+    g.mean_diff_day = 5
+    # 30+5 天,避免指标过于灵敏反复打脸
+    close_data = attribute_history(g.ref_stock, g.mean_day + g.mean_diff_day, '1d', ['close'])
+    high_low_data = attribute_history(g.ref_stock, g.N, '1d', ['high', 'low'])
+
+    # 这两句同上面的功能相同，愿意测试的可以试试，与avoid_future_data相互矛盾，只能取二者中的一个
+    # close_data = get_price(g.ref_stock, end_date=context.current_dt-datetime.timedelta(1),count=g.mean_day + g.mean_diff_day,fields=['close'])
+    # high_low_data = get_price(g.ref_stock, end_date=context.current_dt-datetime.timedelta(1),count=g.N, fields=['high', 'low'])
+
+    intercept, slope, r2 = get_ols(high_low_data.low, high_low_data.high)
+    g.slope_series.append(slope)
+    rsrs_score = get_zscore(g.slope_series[-g.M:]) * r2
+    # g.score_threshold = g.score_threshold * (1 + g.threshold)
+    # record(rsrs分数 = rsrs_score,low = -g.score_threshold * (1 - g.threshold),high = g.score_threshold * (1 - g.threshold))
+
+    # if rsrs_score > g.score_threshold * (1 + g.threshold): return "BUY" #0.7乘以1.03    0.721
+    # if rsrs_score > g.score_threshold: return "BUY" #0.7乘以1.03    0.721
+    # elif rsrs_score < -g.score_threshold: return "SELL"
+    print('rsrs_score %s'%rsrs_score)
+    
+    if g.singl == [] or g.singl == "KEEP":
+        if rsrs_score > g.score_threshold: g.singl =  "BUY" #0.7乘以1.03    0.721
+        elif rsrs_score < -g.score_threshold: g.singl =  "SELL"
+        else: g.singl = "KEEP"
+        
+    elif g.singl ==  "SELL":
+        if rsrs_score <= -g.score_threshold * (1 - g.threshold):    # 0.7 * 1-0.001
+            g.singl =  "SELL"
+            print('selling %s'%rsrs_score)
+        else:
+            g.singl =  "KEEP"
+            
+    elif g.singl ==  "BUY":
+        if rsrs_score >= g.score_threshold * (1 - g.threshold):    #0.7 + 1.03 = 0.721 #0.679
+            g.singl =  "BUY"
+        else:
+            g.singl =  "KEEP"
+    return g.singl
+    # elif rsrs_score < -g.score_threshold * (1 - g.threshold): return "SELL" ##0.7乘以0.97   -0.679
+
+############################# rsrs函数 #############################
+
+## 收盘后运行函数
+def after_market_close(context):
+    # record(hold_num = len(context.portfolio.positions.keys()))
+    record(total = len(g.stock_list),hold_num = len(context.portfolio.positions.keys()))
+
+# 交易函数
+def order_target_value_(security, value):
+	if value == 0:
+# 		log.debug("Selling out %s" % (security))
+		print('')
+# 		print('rsrs清仓')
+	else:
+		log.debug("Order %s to value %f" % (security, value))
+	# 如果股票停牌，创建报单会失败，order_target_value 返回None
+	# 如果股票涨跌停，创建报单会成功，order_target_value 返回Order，但是报单会取消
+	# 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
+	return order_target_value(security, value)
+	
+def close_position(position):
+	security = position.security
+	order = order_target_value_(security, 0)  # 可能会因停牌失败
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+			return True
+	return False
+# 获取前n个单位时间当时的收盘价
+def get_close_price(code, n, unit='1d'):
+    return attribute_history(code, n, unit, 'close', df=False)['close'][0]
+
+def get_blacklist():
+    blacklist = ['600519.XSHG']
+    return blacklist
+
+
+# 平仓，卖出指定持仓
+def _close_position(code):
+    order = order_target_value(code, 0) # 可能会因停牌或跌停失败
+    # if order != None and order.status == OrderStatus.held:
+        # g.sold_stock[code] = 0

@@ -267,4 +267,99 @@ def filter_flat_stock(stock,end_date,pre_date):
     sum_close_num_60 = (df_panel_60.loc[:,'close'] <= df_panel_60.loc[:,'open']).sum()
     abs_sum_60 = (df_panel_60.loc[:,'close'] - df_panel_60.loc[:,'open']).abs() / df_panel_60.loc[:,'open']
     abs_sum_num_6015 = (abs_sum_60 < 0.015).sum()
-    abs_sum_num_603
+    abs_sum_num_6030 = (abs_sum_60 < 0.03).sum()
+    abs_sum_num_6055 = (abs_sum_60 < 0.055).sum()
+    sum_plus_num_60 = (df_panel_60.loc[:,'high'] > df_panel_60.loc[:,'high_limit'] * 0.99).sum()
+    
+    df_panel_100 = get_price(stock, count = 100,end_date=pre_date, frequency='daily', fields=['open', 'close','high_limit','money','high','low'])
+    df_max_close_100 = df_panel_100["close"].max()
+    
+    #150天的波动率
+    df_panel_150 = get_price(stock, count = 150,end_date=pre_date, frequency='daily', fields=['open', 'close','high_limit','money','high','low','pre_close'])
+    sum_plus_num_150 = (df_panel_150.loc[:,'close'] > df_panel_150.loc[:,'pre_close'] * 1.09).sum()
+    df_max_close_150 = df_panel_150["close"].max()
+    df_max_open_150 = df_panel_150["open"].max()
+    df_min_low_150 = df_panel_150["low"].min()
+    abs_sum_150 = (df_panel_150.loc[:,'close'] - df_panel_150.loc[:,'open']).abs() / ((df_panel_150.loc[:,'open']+df_panel_150.loc[:,'close']) / 2)
+    abs_sum_num_1503 = (abs_sum_150 < 0.03).sum()
+    abs_sum_num_1515 = (abs_sum_150 < 0.015).sum()
+    abs_sum_num_15555 = (abs_sum_150 < 0.055).sum()
+    
+    rate_150 = (df_max_close_150 - df_min_low_150) / df_min_low_150
+    
+
+    # df_panel_30 = get_price(stock, count = 30,end_date=pre_date, frequency='daily', fields=['open', 'close','high_limit','money','high','low'])
+    # close_allday_30 = df_panel_30.loc[:,"close"].max()
+    # sum_close_num_two = (df_panel_two.loc[:,'close'] <= df_panel_two.loc[:,'open']).sum()
+    if stock == '603518.XSHG':
+        print(df_close)
+        print(close_allday_60)
+        print("-------20days--------")
+        print(abs_sum_num_2030)
+        print(abs_sum_num_2015)
+        print(abs_sum_num_2055)
+        print("-------60days--------")
+        print(abs_sum_num_6015)
+        print(abs_sum_num_6030)
+        print(abs_sum_num_6055)
+        print("------------150days--------------")
+        print(abs_sum_num_1503) 
+        print(abs_sum_num_1515) 
+        print(abs_sum_num_15555) 
+    if df_close * 1.1 > close_allday_60 and abs_sum_num_2030 > 15 and abs_sum_num_2015 > 7 and abs_sum_num_2055 >= 18:
+        if abs_sum_num_6015 >=28 and abs_sum_num_6030 > 45 and abs_sum_num_6055 > 50:
+                return True
+##过滤上市时间不满1080天的股票
+def filter_stock_by_days(context, stock_list, days):
+    tmpList = []
+    for stock in stock_list :
+        #days_public=(context.current_dt.date() - get_security_info(stock).start_date).days days_public > days and 
+        market_cap = get_circulating_market_cap(stock)
+        market_cap_num = market_cap['circulating_market_cap'].values
+        if market_cap_num >10 and market_cap_num < 150:
+            tmpList.append(stock)
+    return tmpList
+    
+##查看他总的涨停数
+def count_limit_num_all(stock,context):
+    date_now =  (context.current_dt+ timedelta(days = -1)).strftime("%Y-%m-%d")#'2021-01-15'#datetime.datetime.now()
+    yesterday = (context.current_dt + timedelta(days = -30)).strftime("%Y-%m-%d")
+    trade_date = get_trade_days(start_date=yesterday, end_date=date_now, count=None)
+    limit_num = 0
+    for datenum in trade_date:
+        df_panel = get_price(stock, count = 1,end_date=datenum, frequency='daily', fields=['open', 'close','high_limit','money'])
+        df_close = df_panel['close'].values
+        df_high_limit = df_panel['high_limit'].values
+        if df_close == df_high_limit:
+            limit_num = limit_num + 1
+    return limit_num
+    
+##获取个股流通市值数据
+def get_circulating_market_cap(stock_list):
+    query_list = [stock_list]
+    q = query(valuation.code,valuation.circulating_market_cap).filter(valuation.code.in_(query_list))
+    market_cap = get_fundamentals(q)
+    market_cap.set_index('code', inplace=True)
+    return market_cap
+
+def count_limit_num(stock,context):
+    date_now =  (context.current_dt+ timedelta(days = -1)).strftime("%Y-%m-%d")#'2021-01-15'#datetime.datetime.now()
+    yesterday = (context.current_dt + timedelta(days = -20)).strftime("%Y-%m-%d")
+    trade_date = get_trade_days(start_date=yesterday, end_date=date_now, count=None)
+    limit_num = 0
+    for datenum in trade_date:
+        df_panel = get_price(stock, count = 1,end_date=datenum, frequency='daily', fields=['open', 'close','high_limit','money'])
+        df_close = df_panel['close'].values
+        df_high_limit = df_panel['high_limit'].values
+        if df_close == df_high_limit:
+            limit_num = limit_num + 1
+    #print("涨停板天数："+str(limit_num))
+    return limit_num
+    
+        
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('除当天的股票数据-----函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    #消除当天的股票数据
+    help_stock = []
+    #print(help_stock)

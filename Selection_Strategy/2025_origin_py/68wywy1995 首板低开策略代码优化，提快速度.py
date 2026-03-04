@@ -214,4 +214,65 @@ def get_hl_count_df(hl_list, date, watch_days):
 '''def get_continue_count_df(hl_list, date, watch_days):
     df_list = []
     for d in range(2, watch_days+1):
-        HLC = get_hl_count_df(hl
+        HLC = get_hl_count_df(hl_list, date, d)
+        CHLC = HLC[HLC['count'] == d]
+        df_list.append(CHLC)
+    ccd = pd.concat(df_list) if df_list else pd.DataFrame()
+    if not ccd.empty:
+        stock_list = ccd.index.unique()
+        ccd_list = []
+        for s in stock_list:
+            tmp = ccd.loc[[s]]
+            if len(tmp) > 1:
+                M = tmp['count'].max()
+                tmp = tmp[tmp['count'] == M]
+            ccd_list.append(tmp)
+        if ccd_list:
+            ccd = pd.concat(ccd_list)   
+            ccd.sort_values(by='count', ascending=False, inplace=True)
+    return ccd'''
+    
+def get_continue_count_df(hl_list, date, watch_days):
+    df_list = []
+    for d in range(2, watch_days+1):
+        HLC = get_hl_count_df(hl_list, date, d)
+        CHLC = HLC[HLC['count'] == d]
+        df_list.append(CHLC)
+    ccd = pd.concat(df_list) if df_list else pd.DataFrame()
+    if not ccd.empty:
+        ccd = ccd.sort_values(by='count', ascending=False).groupby(level=0).head(1)
+    return ccd
+    
+# 计算股票处于一段时间内相对位置
+def get_relative_position_df(stock_list, date, watch_days):
+    if stock_list:
+        df = get_price(stock_list, end_date=date, fields=['high', 'low', 'close'], count=watch_days, fill_paused=False, skip_paused=False, panel=False).dropna()
+        close = df.groupby('code')['close'].last()
+        high = df.groupby('code')['high'].max()
+        low = df.groupby('code')['low'].min()
+        result = pd.DataFrame({
+            'rp': (close - low) / (high - low)
+        }, index=close.index)
+    else:
+        result = pd.DataFrame(columns=['rp'])
+    return result
+
+# 筛选出某一日某一个时间之前涨停的股票
+def get_hl_stock_at_time(initial_list, date, end_time):
+    hl_list = []
+    if(len(initial_list)>0):
+        end_str = join_date_time(date, end_time)
+        df = get_price(initial_list, end_date=end_str, frequency='1m', fields=['close','high_limit'], count=1, panel=False, fill_paused=False, skip_paused=False)
+        df = df.dropna() #去除停牌
+        df = df[df['close'] == df['high_limit']]
+        hl_list = list(df.code)
+    return hl_list
+    
+#过滤最近一段时间有跌停的股票
+def filter_low_limits(stock_list, date, N):
+    df = get_price(stock_list, end_date=date, frequency='daily', fields=['close', 'low_limit'], count=N, panel=False, fill_paused=False, skip_paused=False)
+    df = df.dropna() #去除停牌
+    df = df[df['close'] == df['low_limit']]
+    ll_list = list(df.code)
+    stock_list = [s for s in stock_list if s not in ll_list]
+    return(stock_list)

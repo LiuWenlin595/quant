@@ -121,4 +121,81 @@ def filter_paused_stock(stock_list):
 # 过滤ST及其他具有退市标签的股票
 def filter_st_stock(stock_list):
 	current_data = get_current_data()
-	return [stock for stock
+	return [stock for stock in stock_list
+			if not current_data[stock].is_st
+			and 'ST' not in current_data[stock].name
+			and '*' not in current_data[stock].name
+			and '退' not in current_data[stock].name]
+
+
+# 过滤涨停的股票
+def filter_limit_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	# 已存在于持仓的股票即使涨停也不过滤，避免此股票再次可买，但因被过滤而导致选择别的股票
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or current_data[stock].low_limit < last_prices[stock][-1] < current_data[stock].high_limit]
+
+#1-1 根据最近三年分红除以当前总市值计算股息率并筛选(代码修改，可以再一创运行）
+def get_dividend_ratio_filter_list(context, stock_list, sort, p1, p2):
+    time1 = context.previous_date
+    time0 = time1 - datetime.timedelta(days=365*3)#最近3年分红
+    #获取分红数据，由于finance.run_query最多返回4000行，以防未来数据超限，最好把stock_list拆分后查询再组合
+    interval = 1000 #某只股票可能一年内多次分红，导致其所占行数大于1，所以interval不要取满4000
+    list_len = len(stock_list)
+    #截取不超过interval的列表并查询
+    q = query(finance.STK_XR_XD.code, finance.STK_XR_XD.a_registration_date, finance.STK_XR_XD.bonus_amount_rmb
+    ).filter(
+        finance.STK_XR_XD.a_registration_date >= time0,
+        finance.STK_XR_XD.a_registration_date <= time1,
+        finance.STK_XR_XD.code.in_(stock_list[:min(list_len, interval)]))
+    df = finance.run_query(q)
+    #对interval的部分分别查询并拼接
+    if list_len > interval:
+        df_num = list_len // interval
+        for i in range(df_num):
+            q = query(finance.STK_XR_XD.code, finance.STK_XR_XD.a_registration_date,  finance.STK_XR_XD.bonus_amount_rmb
+            ).filter(
+                finance.STK_XR_XD.a_registration_date >= time0,
+                finance.STK_XR_XD.a_registration_date <= time1,
+                finance.STK_XR_XD.code.in_(stock_list[interval*(i+1):min(list_len,interval*(i+2))]))
+            temp_df = finance.run_query(q)
+            df = df.append(temp_df)
+    dividend = df.fillna(0)#df.fillna() 是一个 Pandas 数据处理库中的函数，它可以用来填充数据框中的空值
+    dividend = dividend.groupby('code').sum()
+    temp_list = list(dividend.index) #query查询不到无分红信息的股票，所以temp_list长度会小于stock_list
+    # #获取市值相关数据
+    q = query(valuation.code,valuation.market_cap).filter(valuation.code.in_(temp_list))
+    cap = get_fundamentals(q, date=time1)
+    cap = cap.set_index('code')
+    # #计算股息率
+    cap['dividend_ratio']=(dividend['bonus_amount_rmb']/10000)/cap['market_cap']
+    # #排序并筛选
+    cap = cap.sort_values(by=['dividend_ratio'], ascending=sort)
+    final_list = list(cap.index)[int(p1*len(cap)):int(p2*len(cap))]
+    # print("近3年累计分红率排名前{0:.2%}的股有{1}只".format(p2,len(final_list)))
+    return final_list
+	
+# 过滤次新股
+def filter_new_stock(context, stock_list):
+    return [stock for stock in stock_list if (context.previous_date - datetime.timedelta(days=300)) > get_security_info(stock).start_date]
+    
+def choice_try_A(context,stocks):
+    stocks = get_dividend_ratio_filter_list(context, stocks, False, 0, 0.1)    #股息率排序
+    # 获取基本面数据
+    df = get_fundamentals(query(
+            valuation.code,
+            valuation.circulating_market_cap,
+        ).filter(
+            valuation.code.in_(stocks),
+            valuation.pe_ratio.between(0,25),#市盈率
+            indicator.inc_return >3,#净资产收益率(扣除非经常损益)(%)
+            indicator.inc_total_revenue_year_on_year>5,#营业总收入同比增长率(%)
+            indicator.inc_net_profit_year_on_year>11,#净利润同比增长率。
+            valuation.pe_ratio / indicator.inc_net_profit_year_on_year>0.08,#净利润同比增长率
+            valuation.pe_ratio / indicator.inc_net_profit_year_on_year<1.9,
+            ))
+    stocks = list(df.code) 
+    print("分红比率筛选后的股票有：{}".format(len(stocks)))
+    # print(df)
+    return stocks

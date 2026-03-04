@@ -181,10 +181,169 @@ def choice_stocks(context, index, num):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # 资金划转代码
-
 #对冲比例调整+账户间资金划转
 def rebalance(context):
     # 计算资产总价值
     total_value = context.portfolio.total_value
     # 计算预期的股票账户价值
-    expected_stock_value = total
+    expected_stock_value = total_value * g.stock_share
+    
+    # 将两个账户的钱调到预期的水平
+    transfer_cash(1, 0, min(context.subportfolios[1].transferable_cash, max(0, expected_stock_value-context.subportfolios[0].total_value)))
+    transfer_cash(0, 1, min(context.subportfolios[0].transferable_cash, max(0, context.subportfolios[0].total_value-expected_stock_value)))
+
+    # 计算股票账户价值（预期价值和实际价值其中更小的那个）
+    stock_value = min(context.subportfolios[0].total_value, expected_stock_value)
+    
+    
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# CTA部分代码
+
+## 开盘前运行函数
+def before_market_open_future(context):
+    
+    # 获取当月合约
+    g.code_1 = get_future_contracts(g.future_type)[0]
+    
+    # 交割日
+    de_day = get_CCFX_end_date(g.code_1)
+    
+    #判断是否交割日，确定下一月交易的手数
+    if context.current_dt.date() == de_day:
+        g.de_day = 1
+        #资产全价值的15%（70%指增，30%的CTA，其中30%的50%为保证金专用）
+        value = int(context.subportfolios[1].total_value) * g.future_position
+        #用于交易头寸的保证金占用  
+        margin = int(get_bars(g.benchmark, 1, '1d', ['close'],  end_dt=context.previous_date,include_now=True)['close'][0]) * g.unitprice * g.futures_margin_rate
+        #计算最大持仓手数（保证金15%）最高不超过100手
+        g.k = min(int(value / margin),100)
+        log.info('手数',g.k)
+        
+    else:
+        g.de_day = 0
+  
+    # 计数，每g.day天拟合一次
+    if g.day_count == g.day:
+        g.day_count = 0
+    else:
+        g.day_count += 1
+
+#开盘时运行交易函数(波动率小开仓开1.2倍，波动率大开仓开0.8倍),外加止损模块
+def market_trade_future(context):
+    
+    g.sign = update_niu_signal(context,g.benchmark)
+    g.loss_stop = loss_stop(context,g.benchmark)
+    g.volatility = volatility(context, g.benchmark)
+    
+    #如果波动率小，可以按1.5倍加仓；波动率大就正常
+    if g.volatility == -1:
+       future_position =  int(1.5 *g.k)
+    elif g.volatility == 1:
+        future_position =  int(1 *g.k)
+        
+    #开仓信号
+    if (len(context.subportfolios[1].long_positions) == 0) & (len(context.subportfolios[1].short_positions) == 0):
+        if g.sign > 0:
+            order(g.code_1, future_position, side='long', pindex=1)
+        elif g.sign < 0:
+            order(g.code_1, future_position, side='short', pindex=1)
+
+    #平仓信号
+    elif (len(context.subportfolios[1].long_positions) + len(context.subportfolios[1].short_positions)) > 0:
+        if g.de_day == 0:
+            
+            #止损：如果从最大收益处回撤g.stop倍ATR,则止损清仓
+            if (len(context.subportfolios[1].long_positions) > 0) & (g.loss_stop == 1):
+                order_target(g.code_1, 0, side='long',pindex=1)
+            elif (len(context.subportfolios[1].short_positions) > 0) & (g.loss_stop == 1):
+                order_target(g.code_1, 0, side='short',pindex=1)
+            
+            #平开仓：价格上穿或下穿ema线，调整仓位
+            elif (len(context.subportfolios[1].long_positions) > 0) & (g.sign == 0):
+                order_target(g.code_1, 0, side='long', pindex=1)
+                order(g.code_1, future_position, side='short', pindex=1)
+            elif (len(context.subportfolios[1].short_positions) > 0) & (g.sign > 0):
+                order_target(g.code_1, 0, side='short', pindex=1)
+                order(g.code_1, future_position, side='long', pindex=1)
+       
+        # 交割日平仓
+        else:
+            if len(context.subportfolios[1].long_positions) > 0:
+                order_target(g.code_1, 0, side='long', pindex=1)
+            else:
+                order_target(g.code_1, 0, side='short', pindex=1)
+
+#ATR波动率信号
+def volatility(context,ind):
+    ind=g.benchmark
+    
+    #ATR(security_list, check_date, timeperiod=14)
+    current_ATR_a = ATR(ind,context.current_dt, g.shortdays)
+    current_ATR_b = ATR(ind,context.current_dt, g.longdays)
+    
+    k = current_ATR_a[-1][ind] - g.para * current_ATR_b[-1][ind]
+    
+    if k < 0:
+     volatility = -1 #波动率低，可重仓
+    elif k > 0:
+     volatility = 1 #波动率高，可轻仓
+     
+    return volatility
+    
+    
+                
+#ATR止损信号
+def loss_stop(context,ind):
+    include_now = True#表示读取当天的日K线
+    unit='1d'
+    ind=g.benchmark
+    
+    #ATR(security_list, check_date, timeperiod=14)
+    current_ATR = ATR(ind,context.current_dt, g.ATRdays)
+    close = get_bars(ind, 1, '1d', ['close'],  end_dt=context.current_dt,include_now=include_now)['close']
+    
+    high = max(get_bars(ind, g.boundrydays, unit, ['high'],  end_dt=context.previous_date,include_now=include_now)['high'])#5日最高
+    low = min(get_bars(ind, g.boundrydays, unit, ['low'],  end_dt=context.previous_date,include_now=include_now)['low'])#5日最低
+    
+    if (len(context.portfolio.long_positions) > 0) & (close < high - g.stop * current_ATR[-1][ind]):
+     loss_stop = 1 #多头止损
+    elif (len(context.portfolio.short_positions) > 0) & (close > low + g.stop * current_ATR[-1][ind]):
+     loss_stop = 1 #空头止损
+    else:
+     loss_stop = 0
+     
+    return loss_stop
+
+#开平仓信号
+def update_niu_signal(context,ind):
+    include_now = True#表示读取当天的日K线
+    unit='1d'
+
+    #-------------------标的指数的5日均线，如果均线朝下表示趋势向下，暂停交易---------------
+    ind=g.benchmark
+    close = get_bars(ind, 1, '1d', ['close'],  end_dt=context.current_dt,include_now=include_now)['close']
+    
+    #当天获取5日均线
+    current = EMA(ind,context.current_dt, timeperiod=g.long_days, unit = unit, include_now =include_now, fq_ref_date = None)[ind]
+
+    #前一天的5日均线
+    previous = EMA(ind,context.previous_date, timeperiod=g.long_days, unit=unit, fq_ref_date = None)[ind]
+
+    #当天获取2日均线
+    current_close = EMA(ind,context.current_dt, timeperiod=g.short_days, unit = unit, include_now =include_now, fq_ref_date = None)[ind]
+    #当天获取2日均线
+    previous_close = EMA(ind,context.previous_date, timeperiod=g.short_days, unit=unit, fq_ref_date = None)[ind]
+    
+    if close<current:#<previous:#当价格低于5日均线且5日均线空头排列的时候开空
+     niu_signal = -1 #开仓数量=0
+    elif close>current_close:#>previous_close:#当价格高于5日均线且5日均线多头排列的时候开多
+     niu_signal = 1 #开仓数量=1
+    else:
+     niu_signal = 0
+     
+    return niu_signal    
+
+# 获取金融期货合约到期日
+def get_CCFX_end_date(future_code):
+    # 获取金融期货合约到期日
+    return get_security_info(future_code).end_date

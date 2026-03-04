@@ -237,4 +237,94 @@ def high_continous(stock,trade_date,date_now,context):
         df_open_two = df_panel_three['open'].iloc[1]
         
         df_high_two = df_panel_three['high'].iloc[1]
-        df_low_two = df_
+        df_low_two = df_panel_three['low'].iloc[1]
+        #是不是底部十字星
+        rate_two = abs(df_close_two-df_open_two)/((df_close_two+df_open_two)/2)
+        #十字星最大最小差值小于0.08
+        rate_two_high = abs(df_high_two-df_low_two)/((df_high_two+df_low_two)/2)
+        df_close_three = df_panel_three['close'].iloc[2]
+        df_high_limit_three = df_panel_three['high_limit'].iloc[2]
+        
+        bool_result = check_first_valley(trade_date,stock)
+        if stock == '600211.XSHG':
+            print("-------------------------------------")
+            print("df_close_three="+str(df_close_three))
+            print("df_high_limit_three="+str(df_high_limit_three))
+            print("df_open_one="+str(df_open_one))
+            print("df_close_two="+str(df_close_two))
+            print("df_close_three="+str(df_close_three))
+            print("df_high_one="+str(df_high_one))
+            print("rate_two="+str(rate_two))
+            print("rate_two_high="+str(rate_two_high))
+            print("bool_result="+str(bool_result))
+        #要在60日均线之上
+        df_panel_60 = get_price(stock, count = 60,end_date=yes_date_two, frequency='daily', fields=['open', 'close','high_limit','money'])
+        df_close_mean_60 = df_panel_60['close'].mean()
+        #底分型
+        if df_close_three == df_high_limit_three and df_close_two > df_close_mean_60 and rate_two < 0.025 and rate_two_high < 0.08 and df_open_one > df_close_two * 1.02 and df_open_one > df_open_two * 1.02 and df_close_three > df_close_two * 1.07 and df_close_three > df_open_one:
+            
+            help_stock.append(stock)
+
+##选出打板的股票
+def pick_high_limit(stocks,end_date):
+    df_panel = get_price(stocks, count = 1,end_date=end_date, frequency='daily', fields=['open', 'close','high_limit','money','pre_close'])
+    df_close = df_panel['close']
+    df_open = df_panel['open']
+    df_high_limit = df_panel['high_limit']
+    df_pre_close = df_panel['pre_close']
+    high_limit_stock = []
+    for stock in (stocks):
+        _high_limit = (df_high_limit[stock].values)
+        _close = (df_close[stock].values)
+        _open =  (df_open[stock].values)
+        _pre_close = (df_pre_close[stock].values)
+        if(stock[0:3] == '300' or stock[0:3] == '688'):
+            continue
+
+        if _high_limit == _close and _close > _pre_close * 1.05:
+            high_limit_stock.append(stock)
+    return high_limit_stock 
+    
+def check_first_valley(trade_date,stock):
+    int_count = 2
+    for stock_day in trade_date:
+        df_panel = get_price(stock, count = 1,end_date=trade_date[trade_date.size-int_count], frequency='daily', fields=['open', 'close','high_limit','money'])
+        pre_close_price =df_panel['close'].values
+        df_panel_5 = get_price(stock, count = 5,end_date=trade_date[trade_date.size-int_count], frequency='daily', fields=['open', 'close','high_limit','money'])
+        df_close_mean_5 = df_panel_5['close'].mean()
+        int_count = int_count +1
+        if pre_close_price > df_close_mean_5:
+            return False
+        if int_count > 8:
+            return True
+        
+    
+##过滤上市时间不满1080天的股票
+def filter_stock_by_days(context, stock_list, days):
+    tmpList = []
+    for stock in stock_list :
+        days_public=(context.current_dt.date() - get_security_info(stock).start_date).days
+        if days_public > days:
+            tmpList.append(stock)
+    return tmpList
+
+##去除st的股票
+def filter_st(codelist):
+    current_data = get_current_data()
+    codelist = [code for code in codelist if not current_data[code].is_st]
+    return codelist
+
+def filter_paused_stock(stock_list):
+    current_data = get_current_data()
+    stock_list = [stock for stock in stock_list if not current_data[stock].paused]
+    return stock_list
+    
+
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    #得到当天所有成交记录
+    for stock_remove in help_stock:
+            help_stock.remove(stock_remove)
+    log.info('一天结束')
+    log.info('##############################################################')

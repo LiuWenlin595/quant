@@ -2,22 +2,20 @@
 # 标题：8年13倍的ETF动量轮动策略，有滑点，无未来函数，回撤小！
 # 作者：萌新王富贵
 
-'''
-优化说明:
-    1.使用修正标准分
-        rsrs_score的算法有：
-            仅斜率slope，效果一般；
-            仅标准分zscore，效果不错；
-            修正标准分 = zscore * r2，效果最佳;
-            右偏标准分 = 修正标准分 * slope，效果不错。
-    2.将原策略的每次持有两只etf改成只买最优的一个，收益显著提高
-    3.将每周调仓换成每日调仓，收益显著提高
-    4.因为交易etf，所以手续费设为万分之三，印花税设为零，未设置滑点
-    5.修改股票池中候选etf，删除银行，红利等收益较弱品种，增加纳指etf以增加不同国家市场间轮动的可能性
-    6.根据研报，默认参数介已设定为最优
-    7.加入防未来函数
-    8.增加择时与选股模块的打印日志，方便观察每笔操作依据
-'''
+# 优化说明:
+#     1.使用修正标准分
+#         rsrs_score的算法有：
+#             仅斜率slope，效果一般；
+#             仅标准分zscore，效果不错；
+#             修正标准分 = zscore * r2，效果最佳;
+#             右偏标准分 = 修正标准分 * slope，效果不错。
+#     2.将原策略的每次持有两只etf改成只买最优的一个，收益显著提高
+#     3.将每周调仓换成每日调仓，收益显著提高
+#     4.因为交易etf，所以手续费设为万分之三，印花税设为零，未设置滑点
+#     5.修改股票池中候选etf，删除银行，红利等收益较弱品种，增加纳指etf以增加不同国家市场间轮动的可能性
+#     6.根据研报，默认参数介已设定为最优
+#     7.加入防未来函数
+#     8.增加择时与选股模块的打印日志，方便观察每笔操作依据
 
 #导入函数库
 from jqdata import *
@@ -250,4 +248,37 @@ def my_trade(context):
 def check_lose(context):
     for position in list(context.portfolio.positions.values()):
         securities=position.security
-        cost=
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount
+        #这里设定80%止损几乎等同不止损，因为止损在指数etf策略中影响不大
+        if ret <=-80:
+            order_target_value(position.security, 0)
+            print("！！！！！！触发止损信号: 标的={},标的价值={},浮动盈亏={}% ！！！！！！"
+                .format(securities,format(value,'.2f'),format(ret,'.2f')))
+
+#5-1 复盘模块-打印
+#打印每日持仓信息
+def print_trade_info(context):
+    #打印当天成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        print('成交记录：'+str(_trade))
+    #打印账户信息
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+    print('一天结束')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

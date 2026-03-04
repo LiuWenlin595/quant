@@ -363,4 +363,125 @@ def adjust_position_buy(context,b, buy_stocks):
                         order(stock, int(1 * psize/(100 * G[0][3])) * 100, MarketOrderStyle(2 * r))
                     
                     elif int(1 * psize/(100 * G[0][3])) * 100 > 200 and stock[:2] == '68':#非超买超卖状态，正常建仓
-                        order(stock, int(1 * psize/(100 * G[0][3])) * 100, MarketOrderStyle(2 * r))
+                        order(stock, int(1 * psize/(100 * G[0][3])) * 100, MarketOrderStyle(2 * r))                
+        
+    else:
+        log.info('仓位较高，不买入')
+        
+    a= context.portfolio.positions_value / context.portfolio.total_value    
+    log.info('当次买入后仓位:%s' % a)                
+
+
+#1-3 准备股票池
+def prepare_stock_list(context):
+    #获取已持有列表
+    g.high_limit_list = []
+    hold_list = list(context.portfolio.positions)
+    if hold_list:
+        df = get_price(hold_list, end_date=context.previous_date, frequency='daily',
+                       fields=['close', 'high_limit', 'paused'],
+                       count=1, panel=False)
+        g.high_limit_list = df.query('close==high_limit and paused==0')['code'].tolist()
+        
+    a= context.portfolio.positions_value / context.portfolio.total_value
+    g.a = a
+    log.info('昨日仓位:%s' % a)    
+    return g.a
+
+        
+# 1-5 调整昨日涨停股票
+def check_limit_up(context):
+     # 获取持仓的昨日涨停列表
+    current_data = get_current_data()
+    
+    if g.high_limit_list:
+        for stock in g.high_limit_list:
+            G = get_bars(stock, 1, '1d', ['high','low','open','close'],  end_dt=context.current_dt,include_now=True)
+            r = np.mean(list(G[0]))
+            
+            if current_data[stock].last_price < current_data[stock].high_limit and context.portfolio.positions[stock].amount > 0:
+                #log.info("[%s]涨停打开，卖出" % stock)
+                order_target(stock, 0, MarketOrderStyle(0.8 * r))
+
+
+#止盈    
+def adjust_position_sell(context,s, d):    
+    hold_list = list(context.portfolio.positions) 
+    d = g.stock_amount
+     
+    for s in hold_list:
+        current_data = get_current_data()
+        now_price = current_data[s].last_price
+        open_price = current_data[s].day_open
+        close_data_1d =get_bars(s, end_dt=context.current_dt, count=2,fields=['close', 'high','volume'], include_now=True)
+        p = context.subportfolios[0].positions[s].value #持股价值
+        q = d[s] #每次卖出时拟交易的数量
+        G = get_bars(s, 1, '1d', ['high','low','open','close'],  end_dt=context.current_dt,include_now=True)
+        r = np.mean(list(G[0]))
+                    
+    
+        #非科创板股票止盈
+        if close_data_1d['high'][-1]>=context.portfolio.positions[s].avg_cost*2.382 and context.subportfolios[0].positions[s].amount > 1000 and \
+                (close_data_1d['high'][-1]-now_price)>= context.portfolio.positions[s].avg_cost*0.05 and s[:2] != '68':
+
+            
+            order_target(s, 0)
+            #order(s, -int(q/100) * 100)
+            log.info('1000股以上非科创板收益大于138.2%后，回撤大于5%时平全部仓位'+str(s)+str(get_security_info(s).display_name))
+            
+        if close_data_1d['high'][-1]>=context.portfolio.positions[s].avg_cost*1.382 and context.subportfolios[0].positions[s].amount <= 1000 and \
+            (close_data_1d['high'][-1]-now_price)>= context.portfolio.positions[s].avg_cost*0.05 and s[:2] != '68':
+                
+            order_target(s, 0)#不足1000股平仓
+            log.info('1000股以下非科创板收益大于38.2%后，回撤大于5%时平全部仓位'+str(s)+str(get_security_info(s).display_name))
+
+
+        #科创板股票止盈
+        if close_data_1d['high'][-1]>=context.portfolio.positions[s].avg_cost*2.382 and \
+                (close_data_1d['high'][-1]-now_price)>= context.portfolio.positions[s].avg_cost*0.05 and s[:2] == '68':
+                        
+            order(s, 0, MarketOrderStyle(0.8 * r))
+            log.info('科创板股票收益大于238.2%且持仓股数大于1000股，回撤大于5%时平全部的仓位'+str(s)+str(get_security_info(s).display_name))
+        
+        if close_data_1d['high'][-1]>=context.portfolio.positions[s].avg_cost*2.382 and \
+                (close_data_1d['high'][-1]-now_price)>= context.portfolio.positions[s].avg_cost*0.05 and s[:2] == '68':
+                        
+            order_target(s, 0, MarketOrderStyle(0.8 * r))
+            log.info('科创板股票收益大于161.8%且持仓股数小于1000股，回撤大于5%时平100%的仓位'+str(s)+str(get_security_info(s).display_name))            
+                    
+                
+        #非科创板股票止损1-（（1-0.854）*0.618+0.854）=0.94418
+        if now_price < context.portfolio.positions[s].avg_cost*0.94418 and context.subportfolios[0].positions[s].amount > 1000 and s[:2] != '68':
+            order_target(s, 0)   
+            #log.info('^^^^^^^^^^^^非科创板股票收益小于等于-5%直接平仓,止损^^^^^^^^^^^^'+str(s)+str(get_security_info(s).display_name))     
+        
+        if now_price < context.portfolio.positions[s].avg_cost*0.94418 and context.subportfolios[0].positions[s].amount <= 1000 and s[:2] != '68':
+            order_target(s, 0)   
+            #log.info('^^^^^^^^^^^^非科创板股票收益小于等于-5%直接平仓,止损^^^^^^^^^^^^'+str(s)+str(get_security_info(s).display_name))       
+            
+        #科创板股票止损（1-0.618*1.382=0.854）
+        if now_price < context.portfolio.positions[s].avg_cost*0.854 and s[:2] == '68':
+            order_target(s, 0, MarketOrderStyle(0.8 * r))   
+            #log.info('^^^^^^^^^^^^科创板股票收益小于等于-15%直接平仓,止损^^^^^^^^^^^^'+str(s)+str(get_security_info(s).display_name))      
+
+            
+        
+        
+ 
+#2-6 过滤科创北交股票
+def filter_kcbj_stock(stock_list):
+    for stock in stock_list[:]:
+        if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68':
+            stock_list.remove(stock)
+    return stock_list
+
+# 2-2 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list if not (
+            current_data[stock].is_st or
+            'ST' in current_data[stock].name or
+            '*' in current_data[stock].name or
+            '退' in current_data[stock].name)]
+            
+# end

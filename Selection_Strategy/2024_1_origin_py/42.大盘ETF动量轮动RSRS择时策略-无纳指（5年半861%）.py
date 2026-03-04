@@ -126,3 +126,192 @@ def get_rank(context,stock_pool):
         # data = attribute_history(stock, g.momentum_day, '1d', ['close'])
         # score = np.polyfit(np.arange(g.momentum_day),data.close/data.close[0],1)[0].real # 乖离动量拟合
         #log.info("计算data.close[-1]=%f, data.close[-2]=%f,adr=%f"%(data.close[-1], data.close[-2], adr))
+        rank.append([stock, score*raise_x, adr])
+        g.stock_motion[stock].append(score)
+        if(len(g.stock_motion[stock])>5):g.stock_motion[stock].pop(0)
+    #log.info('rsrs_score:')
+    str = ''
+    for item in rank:
+        str += "%s:%.2f:%.2f; "%(item[0], item[1], item[2])
+    log.info(str)
+    rank = [ i for i in rank if math.isnan(i[1])==False ]
+    rank.sort(key=lambda x: x[1],reverse=True)
+    return rank[0]
+
+## 线性回归：复现statsmodels的get_OLS函数
+def get_ols(x, y):
+    slope, intercept = np.polyfit(x, y, 1)
+    r2 = 1 - (sum((y - (slope * x + intercept))**2) / ((len(y) - 1) * np.var(y, ddof=1)))
+    return (intercept, slope, r2)
+
+## 因子标准化
+def get_zscore(slope_series):
+    mean = np.mean(slope_series)
+    std = np.std(slope_series)
+    return (slope_series[-1] - mean) / std
+
+
+def get_zscore_slope(z_scores):
+    y = z_scores
+    x = np.arange(len(z_scores))
+    slope, intercept = np.polyfit(x, y, 1)
+    return slope
+    
+# 只看RSRS因子值作为买入、持有和清仓依据，前版本还加入了移动均线的上行作为条件
+def get_timing_signal(context,stock):
+    data = attribute_history(g.ref_stock, g.N, '1d', ['high', 'low', 'close'])
+    intercept, slope, r2 = get_ols(data.low, data.high)
+    g.slope_series.append(slope)
+    rsrs_score = get_zscore(g.slope_series[-g.M:]) * r2
+    g.rsrs_score_history.append(rsrs_score)
+    rsrs_slope = get_zscore_slope(g.rsrs_score_history[-g.K:])
+    #大盘指数收盘价趋势
+    idex_slope = np.polyfit(np.arange(8), data.close[-8:],1)[0].real
+    g.slope_series.pop(0)
+    g.rsrs_score_history.pop(0)
+    #record(rsrs_score=rsrs_score,rsrs_slope=rsrs_slope)
+    
+    log.info('rsrs_slope {:.3f}'.format(rsrs_slope)+' rsrs_score {:.3f} '.format(rsrs_score)
+    +' idex_slope {:.3f} '.format(idex_slope))
+    #通过摆动指数，提早知道趋势的变化，这种情况优先于RSRS
+    WR2,WR1 = WR([g.ref_stock], check_date =context.previous_date, N = 21, N1 = 14, unit='1d', include_now=True)
+    #if WR1[g.ref_stock]<=2 and WR2[g.ref_stock] <=2: return "SELL"
+    if WR1[g.ref_stock]>=97 and WR2[g.ref_stock] >=97: return "BUY"
+    #表示上升趋势快结束了，即将出现下跌
+    if(rsrs_slope< 0 and rsrs_score >0):
+        return "SELL"
+    #大盘下跌趋势过程中，不能买入
+    if(idex_slope<0) and (rsrs_slope>0) and (rsrs_score < g.score_fall_thr): return "SELL"
+    #大盘上升过程当中，大胆买入
+    if(idex_slope>g.idex_slope_raise_thr) and (rsrs_slope>0): return "BUY"
+    #大盘可能上涨，这个时候可以买入
+    if (rsrs_score> g.score_thr) : return "BUY"
+    #elif(idex_slope > 5) : return "BUY"
+    else: return "SELL"
+
+
+#4-2 交易模块-开仓
+#买入指定价值的证券,报单成功并成交(包括全部成交或部分成交,此时成交量大于0)返回True,报单失败或者报单成功但被取消(此时成交量等于0),返回False
+def open_position(security, value):
+	order = order_target_value(security, value)
+	if order != None and order.filled > 0:
+		return True
+	return False
+
+#4-3 交易模块-平仓
+#卖出指定持仓,报单成功并全部成交返回True，报单失败或者报单成功但被取消(此时成交量等于0),或者报单非全部成交,返回False
+def close_position(position):
+	security = position.security
+	order = order_target_value(security, 0)  # 可能会因停牌失败
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+			return True
+	return False
+
+def adjust_position(context, buy_stocks):
+	for stock in context.portfolio.positions:
+		if stock not in buy_stocks:
+# 			log.info("[%s]已不在应买入列表中" % (stock))
+			position = context.portfolio.positions[stock]
+			close_position(position)
+			g.hold_stock = 'null'
+			return
+		else:
+		    pass
+# 			log.info("[%s]已经持有无需重复买入" % (stock))
+	position_count = len(context.portfolio.positions)
+	if g.stock_num > position_count:
+		value = context.portfolio.cash / (g.stock_num - position_count)
+		for stock in buy_stocks:
+			if context.portfolio.positions[stock].total_amount == 0:
+				if open_position(stock, value):
+					if len(context.portfolio.positions) == g.stock_num:
+					    g.hold_stock = stock
+					    break
+
+def buy_stocks(context, buy_stocks):
+	position_count = len(context.portfolio.positions)
+	if g.stock_num > position_count:
+		value = context.portfolio.cash / (g.stock_num - position_count)
+		for stock in buy_stocks:
+			if context.portfolio.positions[stock].total_amount == 0:
+				if open_position(stock, value):
+					if len(context.portfolio.positions) == g.stock_num:
+					    g.hold_stock = stock
+					    break
+						
+# 计算待买入的ETF和择时信号,判断股票动量变化一阶导数, 如果变化太大，则空仓
+def my_trade_prepare(context):
+    hour = context.current_dt.hour
+    minute = context.current_dt.minute
+    #if hour == 9 and minute == 30:   # 9:30开盘时买入（标的根据昨天之前的数据算出来）
+    g.check_out_list = get_rank(context,g.stock_pool)
+    g.timing_signal = get_timing_signal(context,g.ref_stock)
+    log.info('今日自选及择时信号:{} {}'.format(g.check_out_list[0],g.timing_signal))
+    #判断股票动量变化一阶导数, 如果变化太大，则空仓
+    cur_stock = g.check_out_list[0]
+    cur_adr = g.check_out_list[2]#股票价格相对前一天涨跌比例
+    change_rate = g.stock_motion[cur_stock][-1]-g.stock_motion[cur_stock][-2]
+    #log.info("涨跌比例:%f, 动量变化速度:%f"%(cur_adr, change_rate))
+    if(change_rate>g.Motion_1diff) or (cur_adr>g.raiser_thr):
+        g.timing_signal = 'SELL'
+        log.info("由于涨跌:%f, 动量变化%0f，今日空仓"%(cur_adr, change_rate))
+    if g.timing_signal == 'SELL':
+        for stock in context.portfolio.positions:
+            #print("准备卖出ETF [%s]"%stock)
+            send_message("准备卖出ETF [%s]"%stock)
+    elif g.timing_signal == 'BUY' or g.timing_signal == 'KEEP':
+        if g.check_out_list[0] not in context.portfolio.positions:
+            if(len(context.portfolio.positions)>0):
+                stock_tmps = list(context.portfolio.positions.keys())
+                #print("准备卖ETF [%s], 买入ETF [%s]"%(stock_tmps[0], g.check_out_list[0]))
+                send_message("准备卖ETF [%s], 买入ETF [%s]"%(stock_tmps[0], g.check_out_list[0]))
+            else:
+                #print("准备买入ETF [%s]"%g.check_out_list[0])
+                send_message("准备买入ETF [%s]"%g.check_out_list[0])
+    else:
+        send_message("保持原来仓位")
+        pass
+    
+# 交易主函数，先确定ETF最强的是谁，然后再根据择时信号判断是否需要切换或者清仓
+def my_trade(context):
+    hour = context.current_dt.hour
+    minute = context.current_dt.minute
+    #if hour == 9 and minute == 30:   # 9:30开盘时买入（标的根据昨天之前的数据算出来）
+    if g.timing_signal == 'SELL':
+        for stock in context.portfolio.positions:
+            position = context.portfolio.positions[stock]
+            close_position(position)
+    elif g.timing_signal == 'BUY' or g.timing_signal == 'KEEP':
+        adjust_position(context, g.check_out_list)
+    else: pass
+
+def my_sell2buy(context):
+    hour = context.current_dt.hour
+    minute = context.current_dt.minute
+    #if hour == 9 and minute == 30:   # 9:30开盘时买入（标的根据昨天之前的数据算出来）
+    if hour == 9:
+        if g.timing_signal == 'BUY' or g.timing_signal == 'KEEP':
+            buy_stocks(context, g.check_out_list)
+        else: pass
+
+# 这个函数几乎没用
+def check_lose(context):
+    for position in list(context.portfolio.positions.values()):
+        security=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        
+        if ret <=-90:
+            order_target_value(position.security, 0)
+            print("！！！！！！触发止损信号: 标的={},标的价值={},浮动盈亏={}% ！！！！！！"
+                .format(security,format(value,'.2f'),format(ret,'.2f')))
+
+    
+def print_trade_info(context):
+    #打印当天成交记录
+    trades = get_trades()
+    for _trade in trades.values(): print('成交记录：'+str(_trade))
+    #打印账户信息
+    print('———————————————————————————————————————分割线1————————————————————————————————————————')

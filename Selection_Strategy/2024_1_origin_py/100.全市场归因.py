@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# (已移除或注释) # In[34]:
-
-
 from datetime import datetime, timedelta
 import datetime
 
@@ -39,9 +36,6 @@ plt.style.use('ggplot')
 
 # ## 1.1获取指定频率交易日数据
 
-# (已移除或注释) # In[35]:
-
-
 #获取交易日列表，返回DatetimeIndex对象
 def get_tradeday_list(start,end,frequency=None,count=None):
     if count != None:
@@ -65,9 +59,6 @@ def get_tradeday_list(start,end,frequency=None,count=None):
 
 
 # ## 1.2 筛选股票池
-
-# (已移除或注释) # In[36]:
-
 
 #返回指定交易日下一个交易日
 def ShiftTradingDay(date,shift):
@@ -115,9 +106,6 @@ def filter_stock(stockList,date,days=21*3,limit=0):
 
 # ## 1.3 行业标记
 
-# (已移除或注释) # In[37]:
-
-
 #为股票池添加行业标记,return df格式 ,为中性化函数的子函数   
 def get_industry_exposure1(stock_list,date):
     stock_list = list(stock_list)
@@ -139,9 +127,6 @@ def get_industry_exposure1(stock_list,date):
 
 
 # ## 1.4IC统计相关函数
-
-# (已移除或注释) # In[38]:
-
 
 def dict_to_df(dct,index,name=None):
     df = pd.DataFrame(dct,index=index).T
@@ -241,9 +226,6 @@ def score(series):
 
 # ## 1.5相关性画图函数
 
-# (已移除或注释) # In[39]:
-
-
 def plot_heat(ic_df,eval_df):
     # 截取表现好的因子
     eval_df = eval_df[eval_df['score']>=2]
@@ -257,9 +239,6 @@ def plot_heat(ic_df,eval_df):
 # # 2 数据获取
 
 # ## 2.1初始设置
-
-# (已移除或注释) # In[40]:
-
 
 #设置统计数据区间
 index = '000985.XSHG' #设置股票池，和对比基准，这里是中证500
@@ -280,4 +259,462 @@ elif trade_freq == 'day':
     date_list = get_tradeday_list(start=date_start,end=date_end,count=None)#获取回测日期间的所有交易日
 else:
     date_day_list = get_tradeday_list(start=date_start,end=date_end,count=None)#获取回测日期间的所有交易日
-    date_list = [date_day_list[i]
+    date_list = [date_day_list[i] for i in range(len(date_day_list)) if i%int(trade_freq) == 0]
+
+
+date_list #每月首个交易日
+
+
+# ## 2.2 获取风格因子
+
+#通过聚宽因子获取barra风险因子值进行记录
+factor_name = ['size','beta','momentum','residual_volatility','non_linear_size',               'book_to_price_ratio','liquidity','earnings_yield',               'growth','leverage']
+def get_barra_factor(stock_list,date): #返回df对象
+    global factor_name
+    factor_data = get_factor_values(securities=stock_list, factors = factor_name
+            ,end_date=end_date,count=1)
+    df = pd.DataFrame()
+    for f in factor_name:
+        temp_df = pd.DataFrame(factor_data[f]).T
+        df = pd.concat([df,temp_df],axis=1)
+    df.columns=factor_name
+    return df
+
+#进行因子值计算
+factor_data_dict = {}
+
+#循环时间列表获取原始因子数据组成dict
+for end_date in date_list[:]:
+    end_date=str(end_date)[:10]
+    print('正在计算 {} 因子数据......'.format(end_date))
+    stocks_list = get_index_stocks(index,date=end_date)
+    #stocks_list=list(get_all_securities(['stock']).index)
+    factor_data_dict[end_date] = get_barra_factor(stocks_list,end_date)
+    
+print('返回最后一个交易日因子矩阵')
+factor_data_dict[end_date].head(5)
+
+
+# ## 2.3 数据清洗
+
+#数据清洗、包括去极值、标准化、中性化等,并加入y值
+factor_data_y_dict = {}
+for date_1,date_2 in zip(date_list[:-1],date_list[1:]):
+    d1 = ShiftTradingDay(date_1,1)   #往后推一天
+    d2 = ShiftTradingDay(date_2,1)
+    d3 = ShiftTradingDay(date_2,2)   #往后推两天
+    print('开始整理 {} 数据...'.format(str(date_2)[:10]))
+    factor_df = factor_data_dict[str(date_1)[:10]] #根据字典存储的日期格式不同进行不同设置
+    pool = list(factor_df.index)
+    pool = filter_stock(pool,str(d1)[:10],days=21*3) #进行新股、ST股票过滤
+    
+    #计算指数涨跌幅
+    df_1 = get_price(index,end_date=d1,fields=['open'],count = 1)['open']
+    #df_1 = get_price(stocks_list,end_date=d1,fields=['open'],count = 1)['open']
+    df_2 = get_price(index,end_date=d2,fields=['open'],count = 1)['open']
+    #df_2 = get_price(stocks_list,end_date=d2,fields=['open'],count = 1)['open']
+    index_pct = df_2.values[0]/df_1.values[0] - 1#具体数值
+    
+    #计算各股票涨跌幅
+    df_1 = get_price(pool,end_date=d1,fields=['open'],count = 1)['open']
+    df_2 = get_price(pool,end_date=d2,fields=['open'],count = 1)['open']
+    df_3 = pd.concat([df_1,df_2],axis=0).T #进行合并
+    stock_pct = df_3.iloc[:,1]/df_3.iloc[:,0] - 1 #计算pct，series
+    
+    #对数据进行处理、标准化、去极值、中性化
+    factor_df = winsorize_med(factor_df, scale=3, inclusive=True,                              inf2nan=True, axis=0) #中位数去极值处理
+    factor_df = standardlize(factor_df, inf2nan=True, axis=0) #对每列做标准化处理
+    factor_df = neutralize(factor_df, how=['sw_l1', 'market_cap'], date=date_1,                           axis=0,fillna='sw_l1')#中性化 fillna表示使用行业均值填充
+
+    factor_df['pct_alpha'] =  stock_pct-index_pct#超额收益率
+    factor_df['pct_'] =  stock_pct#收益率
+    factor_data_y_dict[str(date_2)[:10]] = factor_df#返回一个字段为时期值为因子df的字典
+
+print('返回最后一期的因子矩阵')
+factor_data_y_dict[str(date_2)[:10]].head(500)
+
+
+# # 3 模型回归
+
+# ## 3.1以2020-01-02为例计算行业权重
+
+###示例，可跳过
+df = factor_data_y_dict['2023-07-14']
+#计算权重向量
+#求w
+#计算市值平方根占比
+pool = df.index
+get_size = get_fundamentals(query(valuation.code,valuation.market_cap)                            .filter(valuation.code.in_(pool)),date='2023-07-14')
+get_size.index = get_size['code'].values
+get_size['l_size'] = np.sqrt(get_size['market_cap'])
+get_size['w'] = get_size['l_size']/sum(get_size['l_size'])
+W = (get_size['w'].values).reshape(len(get_size),1)#股票权重（WLS用）
+#get_size.head(3)
+#计算行业市值权重占比
+hy_df = get_industry_exposure1(pool,date='2023-07-14').T
+hy_df['cons'] = [1]*len(hy_df)
+
+df_c1 = pd.concat([hy_df,get_size],axis=1)
+ind_name = get_industries(name='sw_l1').index
+all_mkt = sum(df_c1['market_cap'].values)
+ind_w = []
+for ind in list(ind_name):
+    df_temp = df_c1[df_c1[ind]==1]
+    r_temp = sum(df_temp['market_cap'].values)/all_mkt#计算行业市值所占比例
+    ind_w.append(r_temp)
+ind_w
+# 常见只有32个行业，总共有38个行业，有六个行业为0
+
+
+# ## 3.2 以2017-05-02为例计算拉格朗日最优解--因子收益率
+
+###示例，可跳过
+d = date_list[1]
+d = str(d)[:10]
+print('正在计算{}...'.format(d))
+    #获取因子暴露
+factor_df = factor_data_y_dict[d]
+x = factor_df.iloc[:,:-2]
+r = factor_df['pct_'].fillna(factor_df['pct_'].mean()).values
+    # r = factor_df['pct_'].values
+pool  = factor_df.index
+    
+    #计算市值平方根占比
+get_size = get_fundamentals(query(valuation.code,valuation.market_cap).filter(valuation.code.in_(pool)),date=d)
+get_size.index = get_size['code'].values
+get_size['l_size'] = np.sqrt(get_size['market_cap'])
+get_size['w'] = get_size['l_size']/sum(get_size['l_size'])
+W = (get_size['w'].values).reshape(len(get_size),1)
+    
+    #计算行业市值权重占比
+hy_df = get_industry_exposure1(pool,date=d).T
+hy_df['cons'] = [1]*len(hy_df)#常数项
+
+df_c1 = pd.concat([hy_df,get_size],axis=1)
+ind_name = get_industries(name='sw_l1').index
+df_c1['market_cap'].fillna(df_c1['market_cap'].mean())
+all_mkt = df_c1['market_cap'].sum()
+ind_w = []
+for ind in ind_name:
+    df_temp = df_c1[df_c1[ind]==1]
+    r_temp = sum(df_temp['market_cap'].values)/all_mkt
+    ind_w.append(r_temp)
+        
+    #风格因子与行业因子与常数
+X_ = pd.concat([x,hy_df],axis=1)
+    #最优化求解因子收益率
+X = matrix(X_.values)
+w_m = get_size['market_cap'].values
+w_i = ind_w
+    
+    #最优化求解因子收益率
+def func(f):
+    sum_l = []
+    for i in range(len(r)):
+        if str(r[i]) !='nan':
+            sum_l.append(w_m[i]*(r[i]-np.dot(X[i],f))**2)#权重*残差的平方
+    return sum(sum_l)
+
+def func_cons(f):
+    return sum(multiply(f[(-1-len(w_i)):-1],w_i))
+
+    # 初始值 + 约束条件 
+f0 = np.ones(X_.shape[1]) / 10**4
+bnds = tuple((-1,1) for x in f0)
+cons = ({'type':'eq', 'fun': func_cons})
+options={'disp':False, 'maxiter':1000, 'ftol':1e-4,'eps':1e-4}
+
+res = minimize(func, f0, bounds=bnds, constraints=cons, method='SLSQP', options=options)
+
+#x对应array即为因子收益率序列
+res['x']
+    
+
+
+# ## 3.3 时间序列回归计算因子收益率序列
+
+#出现wrong是因为财务报表数据缺失，跳过。
+factor_f_df = pd.DataFrame()
+for d in date_list[1:]:
+    d=str(d)[:10]
+    print('正在计算{}...'.format(d))
+    #获取因子暴露
+    factor_df = factor_data_y_dict[d]
+    x = factor_df.iloc[:,:-2]
+    r = factor_df['pct_'].fillna(factor_df['pct_'].mean()).values
+    # r = factor_df['pct_'].values
+    pool  = factor_df.index
+    
+    #计算市值平方根占比
+    get_size = get_fundamentals(query(valuation.code,valuation.market_cap).                                filter(valuation.code.in_(pool)),date=d)
+    if get_size.shape[0]!=x.shape[0]:
+        print('wrong')
+        pass
+    else:
+        get_size.index = get_size['code'].values
+        get_size['l_size'] = np.sqrt(get_size['market_cap'])
+        get_size['w'] = get_size['l_size']/sum(get_size['l_size'])
+        W = (get_size['w'].values).reshape(len(get_size),1)
+        
+        #计算行业市值权重占比
+        hy_df = get_industry_exposure1(pool,date=d).T
+        hy_df['cons'] = [1]*len(hy_df)
+        
+        df_c1 = pd.concat([hy_df,get_size],axis=1)
+        ind_name = get_industries(name='sw_l1').index
+        df_c1['market_cap'].fillna(df_c1['market_cap'].mean())
+        all_mkt = df_c1['market_cap'].sum()
+        ind_w = []
+        for ind in ind_name:
+            df_temp = df_c1[df_c1[ind]==1]
+            r_temp = sum(df_temp['market_cap'].values)/all_mkt
+            ind_w.append(r_temp)
+            
+        #进行大X拼接
+        X_ = pd.concat([x,hy_df],axis=1)
+        #最优化求解因子收益率
+        X = matrix(X_.values)
+        w_m = get_size['market_cap'].values
+        w_i = ind_w
+        
+        #最优化求解因子收益率
+        def func(f):
+            sum_l = []
+            for i in range(len(r)):
+                if str(r[i]) !='nan':
+                    sum_l.append(w_m[i]*(r[i]-np.dot(X[i],f))**2)
+            return sum(sum_l)
+        
+        def func_cons(x):
+            return sum(multiply(x[-1-len(w_i):-1],w_i))
+        
+        # 初始值 + 约束条件 
+        f0 = np.ones(X_.shape[1]) / 10**4
+        bnds = tuple((-1,1) for x in f0)
+        cons = ({'type':'eq', 'fun': func_cons})
+        options={'disp':False, 'maxiter':1000, 'ftol':1e-4,'eps':1e-4}
+        
+        res = minimize(func, f0, bounds=bnds, constraints=cons,                       method='SLSQP', options=options)
+        
+        factor_f_df[d] = res['x']
+        
+factor_f_df.head()
+
+
+factor_f = factor_f_df.T
+factor_f.columns = factor_name+list(get_industries(name='sw_l1').index)+['cons']
+factor_f.head(15)
+
+
+# ### 3.3.1市值风格解析
+
+#因子历史资产价值（第一期起初为1）
+ones_df=pd.DataFrame(np.ones([1,len(factor_name)]),columns=factor_name,index=[date_list[0]])
+temp_df=(factor_f.iloc[:,:10]+1).cumprod()
+pd.concat([ones_df,temp_df]).plot(figsize=(20,8))
+
+
+#纯净因子累计收益
+((factor_f.iloc[:,:10]+1).cumprod()-1).iloc[-1,:].plot(kind='bar',figsize=(20,8))
+
+
+#行业历史资产价值（第一期起初为1）
+ones_df=pd.DataFrame(np.ones([1,len(get_industries(name='sw_l1').index)+1])                     ,columns=list(get_industries(name='sw_l1').index)+['cons']                     ,index=[date_list[0]])
+temp_df=(factor_f.iloc[:,10:]+1).cumprod()
+pd.concat([ones_df,temp_df]).plot(figsize=(20,8))
+
+
+#行业累计收益
+(temp_df-1).iloc[-1,:].plot(kind='bar',figsize=(20,8))
+
+
+# ### 3.3.2组合收益归因
+
+#中证500选50只股票，进行收益分析
+#进行因子值计算
+factor_data_50_dict = {}
+factor_name = ['size','beta','momentum','residual_volatility','non_linear_size',               'book_to_price_ratio','liquidity','earnings_yield','growth',               'leverage']
+#循环时间列表获取原始因子数据组成dict
+for end_date in date_list[1:]:
+    end_date=str(end_date)[:10]
+    print('正在计算 {} 因子数据......'.format(end_date))
+    stocks_list = get_index_stocks(index,date=end_date)
+    pool_ = [stocks_list[i] for i in range(len(stocks_list)) if i%10==0]#等间隔选取50只
+    stocks_list = pool_
+    #计算行业市值权重占比
+    hy_df = get_industry_exposure1(pool_,date=end_date).T
+    hy_df['cons'] = [1]*len(hy_df)
+    x = factor_data_y_dict[end_date].loc[pool_,factor_name]
+    df_pct = factor_data_y_dict[end_date].loc[pool_,['pct_']]
+    #进行大X拼接
+    X_ = pd.concat([x,hy_df,df_pct],axis=1)
+    factor_data_50_dict[end_date] = X_
+factor_data_50_dict[end_date].head(200)
+
+df = pd.DataFrame(factor_data_50_dict[end_date])
+
+write_file('from_backtest.csv', df.to_csv(), append=False) #写到文件中
+
+
+#收益率与超额收益率的图表？
+factor_fT=factor_f.T
+mark = 1
+for d in date_list[1:]:
+    end_date = str(d)[:10]
+    if end_date not in factor_fT.columns:
+        pass
+    else:
+        d1 = factor_data_50_dict[end_date]
+        d2 = factor_fT.loc[:,end_date]
+        y_df = pd.DataFrame()
+        y_df['pct_'] = d1['pct_']
+        y_df['p_pct_']= np.dot(d1.iloc[:,:-1],d2)
+        if mark == 1:
+            y_df_ = y_df
+            mark = 0
+        else:
+            y_df_ = pd.concat([y_df_,y_df],axis=0)
+y_df_.head(10)
+
+
+y_df_.plot(x='pct_', y='p_pct_', kind='scatter',figsize=(12,8))
+
+
+# ### 3.3.3 以2020-01-02为例,检查因子暴露度百分位
+
+end_date = '2020-02-03'
+d3 = factor_data_y_dict[end_date]
+d1 = factor_data_50_dict[end_date].dropna(axis=0)
+d_mean = d1.mean(axis=0)[:len(factor_name)]#风格因子的均值
+d4 = pd.concat([d3.iloc[:,:len(factor_name)].T,d_mean],axis=1)
+d4['mid'] = [0.5]*len(d4)
+(d4.rank(axis=1)[0]/500).plot(kind='bar',figsize=(12,6))#0号股票各因素在中证500中的排名
+d4['mid'].plot()
+plt.show()
+
+
+y_df.plot(figsize=(12,8))
+
+
+# ## 3.4IC值
+
+# 原来的因子载荷序列中当期股票数据框加入股票下期收益率
+factor_data_y_dict_new =  factor_data_y_dict.copy()
+factor_data_y_dict_new.pop(str(date_list[-1])[:10])
+for idx,timestamp in enumerate(list(date_list[1:-1])):
+    print('正在计算'+str(timestamp)[:10])
+    t1 = ShiftTradingDay(timestamp,1)
+    t2 = ShiftTradingDay(date_list[idx+1],1)
+    t3 = ShiftTradingDay(date_list[idx+2],1)
+    pool = list(factor_data_y_dict_new[str(timestamp)[:10]].index)
+    pool = filter_stock(pool,str(t3)[:10],days=21*3)
+    df1 = get_price(pool,end_date=t2,fields=['open'],count = 1)['open']
+    df2 = get_price(pool,end_date=t3,fields=['open'],count = 1)['open']
+    df3 = pd.concat([df1,df2],axis=0).T #进行合并
+    stock_pct_next = df3.iloc[:,1]/df3.iloc[:,0]-1
+    factor_data_y_dict_new[str(timestamp)[:10]]['pct_next'] = stock_pct_next
+factor_data_y_dict_new[str(date_list[-2])[:10]].head()
+
+
+factors_ic={}
+factors_beta = {}
+factors_t = {}
+
+for date_cur,temp_df in factor_data_y_dict_new.items():
+    print('正在计算'+date_cur)
+    factors_ic_period = []
+    factors_beta_period = []
+    factors_t_period = []
+    temp_df = temp_df.fillna(0)
+    for factor in temp_df.columns[:-3]:
+        ########### 因子IC ############
+        # 计算与最后一列的收益秩相关系数
+        ic = st.spearmanr(temp_df[factor],temp_df['pct_next'])[0]
+        # 依次存入列表
+        factors_ic_period.append(ic)
+
+        ########### 因子收益率,t值,不考虑行业因子###########
+        # 每列因子与收益率RLM回归,得到系数,t值
+        # 加截距,变成二维
+        x=sm.add_constant(temp_df[factor])
+        model = sm.RLM(temp_df['pct_'],x).fit()
+        factors_beta_period.append(model.params[1])
+        factors_t_period.append(model.tvalues[1])
+        
+    factors_ic[date_cur] = factors_ic_period
+    factors_beta[date_cur] = factors_beta_period 
+    factors_t[date_cur] = factors_t_period                           
+
+
+factors_ic
+
+
+ic_df = dict_to_df(factors_ic,factor_name,'IC')
+beta_df = dict_to_df(factors_beta,factor_name,'beta')
+t_df = dict_to_df(factors_t,factor_name,'t')
+
+
+evaluation(ic_df,beta_df,t_df)
+
+
+eval_df = evaluation(ic_df,beta_df,t_df)
+
+
+def color_negative_red(val):
+    color = 'red' if val < 0 else 'black'
+    return 'color: %s' % color
+
+eval_df.style.applymap(color_negative_red,subset=['IC均值', '因子收益率均值', 'IR'])
+
+#eval_df.style.applymap(showColor,subset=pd.IndexSlice[1:,1:])#指定表格位置?
+
+
+corr = plot_heat(ic_df,eval_df)
+
+
+corr
+
+
+# # 4 分层回测
+# 
+
+# 分组回测
+# 
+# ①每个交易日取出股票池中股票的因子值，按从小到大进行排序，将排序后的股票池等分成N个股票组合。(本文采用5等分股票池）
+# 
+# ②等额买入每个等份的股票组合，月底重复①②两步并重新调仓，最后计算平均收益。(本文默认按月调仓）
+# 
+# ③在总的时间区间上，每个调仓周期结束后进行一个复利的计算，最后将每组股票的累计收益绘制出来进行对比。
+
+#设置用于分组检查的因子值
+factor_test = 'momentum'
+pool_dict = {}
+groups = 5
+return_dict={}
+for date_cur,temp_df in factor_data_y_dict_new.items():
+    group_split = pd.qcut(temp_df[factor_test],5,labels =                           ['l1','l2','l3','l4','l5'])#将股票池分为l1-l5五类
+    group1 = group_split[group_split=='l1'].index
+    group2 = group_split[group_split=='l2'].index
+    group3 = group_split[group_split=='l3'].index
+    group4 = group_split[group_split=='l4'].index
+    group5 = group_split[group_split=='l5'].index
+    pool_dict[date_cur] = [group1,group2,group3,group4,group5]
+
+
+return_df = pd.DataFrame()
+for idx,datetimeindex in enumerate(date_list[1:-1]):
+    datetimeindex = str(datetimeindex)[:10]
+    
+    for idx_g,group in enumerate(pool_dict[datetimeindex]):
+        group = list(group)
+        price1 = get_price(group,end_date=datetimeindex,                           fields=['open'],count = 1)['open']
+        price2 = get_price(group,end_date=list(date_list)[idx+2],                           fields=['open'],count = 1)['open']
+        price3 = pd.concat([price1,price2],axis=0).T #进行合并
+        ret = (price3.iloc[:,1]/price3.iloc[:,0] -1).mean()#每期收益率
+        return_df.loc[datetimeindex,idx_g] = ret     
+return_df.columns = ['group1','group2','group3','group4','group5']
+return_df1=(return_df+1).cumprod()
+return_df1
+
+
+return_df1.plot(figsize=(12,8))

@@ -95,4 +95,192 @@ def get_factor(context, industry_codes):
     factor_mom = pd.Series()
     for key in industry_dict.keys():
         stock_list = industry_dict[key]
-        factor_mom_values = get_factor_values(stock_list, 'sharpe_ratio_60', end_date=context.previous
+        factor_mom_values = get_factor_values(stock_list, 'sharpe_ratio_60', end_date=context.previous_date, count=1)['sharpe_ratio_60'].iloc[0].dropna()
+        factor_mom[key] =  -factor_mom_values.mean()
+    
+    factor_mom = (factor_mom-factor_mom.mean())/factor_mom.std()
+    
+    # 拥挤度因子
+    factor_yj = pd.Series()
+    for key in industry_dict.keys():
+        stock_list = industry_dict[key]
+        factor_yj_values = get_factor_values(stock_list, 'DAVOL20', end_date=context.previous_date, count=1)['DAVOL20'].iloc[0].dropna()
+        factor_yj[key] =  factor_yj_values.mean()
+    
+    factor_yj = (factor_yj-factor_yj.mean())/factor_yj.std()
+    
+    
+    # 分析师预期
+    factor_cz = pd.Series()
+    for key in industry_dict.keys():
+        stock_list = industry_dict[key]
+        factor_cz_values = get_factor_values(stock_list, 'long_term_predicted_earnings_growth', end_date=context.previous_date, count=1)['long_term_predicted_earnings_growth'].iloc[0].dropna()
+        factor_cz[key] =  -factor_cz_values.mean()
+    
+    factor_cz = (factor_cz-factor_cz.mean())/factor_cz.std()
+    
+    
+    # 外资看好
+    factor_wz = pd.Series()
+    for key in industry_dict.keys():
+        stock_list = industry_dict[key]
+        factor_wz_values = factor_beixiang(context, getAllData(context, stock_list), stock_list)
+        factor_wz[key] =  -factor_wz_values.share_ratio_mean.mean()
+    
+    factor_wz = (factor_wz-factor_wz.mean())/factor_wz.std()
+    
+    
+    factor_series = factor_mom+factor_yj+0.5*factor_cz+factor_wz
+    factor_series = factor_series.sort_values(ascending=True)
+    
+    return factor_series.index
+        
+
+
+# 北向资金持股占流通股比例的20日均值
+def factor_beixiang(context, allData, code_pool):
+    factor2_dict = {}
+    for code in code_pool:
+        data = allData[allData.code == code]
+        factor2_dict[code] = data.share_ratio.mean()
+    data = pd.DataFrame(list(factor2_dict.items()),columns=['code', 'share_ratio_mean'])
+    factor2 = data.sort_values('share_ratio_mean', ascending=False)
+    return factor2        
+
+
+
+def getAllData(context, code_pool):
+    pre_date = context.previous_date
+    pre_20_date = (pre_date+datetime.timedelta(days=-25)).strftime('%Y-%m-%d')  
+    allData = finance.run_query(query(finance.STK_HK_HOLD_INFO).filter(finance.STK_HK_HOLD_INFO.day>=pre_20_date,
+                                                                finance.STK_HK_HOLD_INFO.day<=pre_date,
+                                                                finance.STK_HK_HOLD_INFO.link_id==310001,   
+                                                                finance.STK_HK_HOLD_INFO.code.in_(code_pool)))
+    allData2 = finance.run_query(query(finance.STK_HK_HOLD_INFO).filter(finance.STK_HK_HOLD_INFO.day>=pre_20_date,
+                                                                finance.STK_HK_HOLD_INFO.day<=pre_date,
+                                                                finance.STK_HK_HOLD_INFO.link_id==310002,   
+                                                                finance.STK_HK_HOLD_INFO.code.in_(code_pool)))
+    allData = allData.append(allData2)
+    allData.day = allData.day.apply(lambda x:x.strftime('%Y-%m-%d'))
+    return allData
+
+
+
+# 过滤函数
+def filter_new_stock(initial_list, date, days=50):
+    d_date = transform_date(date, 'd')
+    return [stock for stock in initial_list if d_date - get_security_info(stock).start_date > dt.timedelta(days=days)]
+
+def filter_st_stock(initial_list, date):
+    str_date = transform_date(date, 'str')
+    if get_shifted_date(str_date, 0, 'N') != get_shifted_date(str_date, 0, 'T'):
+        str_date = get_shifted_date(str_date, -1, 'T')
+    df = get_extras('is_st', initial_list, start_date=str_date, end_date=str_date, df=True)
+    df = df.T
+    df.columns = ['is_st']
+    df = df[df['is_st'] == False]
+    filter_list = list(df.index)
+    return filter_list
+
+# 剔除科创创业京
+def filter_kcbj_stock(initial_list):
+    return [stock for stock in initial_list if stock[0] != '4' and stock[0] != '8' and stock[:2] != '68' and stock[:2] != '30']
+
+# 停牌
+def filter_paused_stock(initial_list, date):
+    df = get_price(initial_list, end_date=date, frequency='daily', fields=['paused'], count=1, panel=False, fill_paused=True)
+    df = df[df['paused'] == 0]
+    paused_list = list(df.code)
+    return paused_list
+
+# 筛选市值
+def filter_market_cap(initial_list, date, left, right):
+    df = get_valuation(initial_list, end_date=date, fields='circulating_market_cap', count=1)
+    i = len(df)-1
+    df = df.sort_values(by = 'circulating_market_cap')
+    stocks = df.code.tolist()
+    return stocks[int(i*left):int(i*right)]
+
+
+
+
+# 将股票按照流通市值排序，只取前n_limit_top个
+def sorted_by_circulating_market_cap(stock_list, n_limit_top=5):
+    q = query(
+        valuation.code,
+    ).filter(
+        valuation.code.in_(stock_list),
+        indicator.eps > 0
+    ).order_by(
+        valuation.circulating_market_cap.desc()
+    ).limit(
+        n_limit_top
+    )
+    return get_fundamentals(q)['code'].tolist()
+
+
+# 每日初始股票池
+def prepare_stock_list(date): 
+    initial_list = get_all_securities('stock', date).index.tolist()
+    initial_list = filter_kcbj_stock(initial_list)
+    initial_list = filter_new_stock(initial_list, date)
+    initial_list = filter_st_stock(initial_list, date)
+    initial_list = filter_paused_stock(initial_list, date)
+    return initial_list
+
+
+def rebalance_position(context, stock_list):
+    current_holding = context.portfolio.positions.keys()
+    stocks_to_sell = list(set(current_holding) - set(stock_list))
+    # 卖出
+    bulk_orders(stocks_to_sell, 0)
+    total_value = context.portfolio.total_value
+
+    if len(stock_list) >0 :
+        # 买入
+        bulk_orders(stock_list, total_value/len(stock_list))
+
+# 批量买卖股票
+def bulk_orders(stock_list,target_value):
+    for i in stock_list:
+        order_target_value(i, target_value)
+
+# 日期转换函数
+def transform_date(date, date_type):
+    if type(date) == str:
+        str_date = date
+        dt_date = dt.datetime.strptime(date, '%Y-%m-%d')
+        d_date = dt_date.date()
+    elif type(date) == dt.datetime:
+        str_date = date.strftime('%Y-%m-%d')
+        dt_date = date
+        d_date = dt_date.date()
+    elif type(date) == dt.date:
+        str_date = date.strftime('%Y-%m-%d')
+        dt_date = dt.datetime.strptime(str_date, '%Y-%m-%d')
+        d_date = date
+    dct = {'str':str_date, 'dt':dt_date, 'd':d_date}
+    return dct[date_type]
+
+# 时间移动函数
+def get_shifted_date(date, days, days_type='T'):
+    #获取上一个自然日
+    d_date = transform_date(date, 'd')
+    yesterday = d_date + dt.timedelta(-1)
+    #移动days个自然日
+    if days_type == 'N':
+        shifted_date = yesterday + dt.timedelta(days+1)
+    #移动days个交易日
+    if days_type == 'T':
+        all_trade_days = [i.strftime('%Y-%m-%d') for i in list(get_all_trade_days())]
+        #如果上一个自然日是交易日，根据其在交易日列表中的index计算平移后的交易日        
+        if str(yesterday) in all_trade_days:
+            shifted_date = all_trade_days[all_trade_days.index(str(yesterday)) + days + 1]
+        #否则，从上一个自然日向前数，先找到最近一个交易日，再开始平移
+        else:
+            for i in range(100):
+                last_trade_date = yesterday - dt.timedelta(i)
+                if str(last_trade_date) in all_trade_days:
+                    shifted_date = all_trade_days[all_trade_days.index(str(last_trade_date)) + days + 1]
+                    break
+    return str(shifted_date)

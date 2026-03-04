@@ -370,4 +370,31 @@ def adjust_position_buy(context, buy_stocks):
             j = []
             G = get_bars(stock, 1, '1d', ['high','low','open','close'],  end_dt=context.current_dt,include_now=True)
             r = np.mean(list(G[0]))
-            H = get_bars(stock
+            H = get_bars(stock, 50, '1d', ['high','low','open','close'],  end_dt=context.current_dt,include_now=True)
+        
+            for a in H:
+                k = list(a)
+                q = np.mean(k)
+                j.append(q)
+        
+            p = (r - np.mean(j))/np.std(j)#这个随机变量理论上服从t(5)分布，5%单侧检验临界值选2.13，10%单侧检验临界值1.53
+        
+            #根据p值调整股票的仓位，每只股票预期买入的价值为value
+            #目前价格落在10%分位数之下，即认为超卖，可以多买；落在5%分位数以上认为超买，少买写
+            
+            if context.portfolio.available_cash < psize:
+                break
+                
+            if stock not in context.portfolio.positions:
+                if p < -2:
+                    log.info('短期超卖，多买点（150%预期仓位）'+str(stock)+str(get_security_info(stock).display_name))
+                    order_target_value(stock, 1.5 * psize)#所有股票都短期超卖？太罕见了，这个情况我就没考虑
+   
+                elif p > 2:
+                    log.info('短期超买，少买点（50%预期仓位）'+str(stock)+str(get_security_info(stock).display_name))
+                    order_target_value(stock, 0.5 * psize)
+                else:
+                    order_value(stock, psize)
+
+                if len(context.portfolio.positions) == g.stock_num:
+                    break

@@ -163,4 +163,37 @@ def filter_limitdown_stock(context, stock_list):
 	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
 			or last_prices[stock][-1] > current_data[stock].low_limit]
 
-def filter_kcb_stock
+def filter_kcb_stock(context, stock_list):
+    return [stock for stock in stock_list  if stock[0:3] != '688']
+
+def filter_new_stock(context,stock_list):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=250)]
+#4-1 判断今天是否为账户资金再平衡的日期
+def today_is_between(context, start_date, end_date):
+    today = context.current_dt.strftime('%m-%d')
+    return start_date <= today <= end_date
+
+
+#5-1 打印每日持仓信息
+def print_position_info(context):
+    #打印当天成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        print('成交记录：'+str(_trade))
+    #打印账户信息
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+        print('———————————————————————————————————')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

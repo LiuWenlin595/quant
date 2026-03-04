@@ -264,4 +264,54 @@ def get_delta_stocks(context,stocklist,today_date):
     roe_chg = df_f_factors.groupby('code')['roe'].apply(val_1) / df_f_factors.groupby('code')['roe'].apply(pre_ttm_avg)
     roe_list = roe_chg.sort_values(ascending = False).index.values.tolist()[:20]
     
-    rev_chg = df_f_factors.groupby('code')['inc_total_revenue_year_on_
+    rev_chg = df_f_factors.groupby('code')['inc_total_revenue_year_on_year'].apply(val_1) / df_f_factors.groupby('code')['inc_total_revenue_year_on_year'].apply(pre_ttm_avg)
+    rev_list = rev_chg.sort_values(ascending = False).index.values.tolist()[:20]
+    
+    ocf_chg = df_f_factors.groupby('code')['ocf_to_revenue'].apply(val_1) / df_f_factors.groupby('code')['ocf_to_revenue'].apply(pre_ttm_avg)
+    ocf_list = ocf_chg.sort_values(ascending = False).index.values.tolist()[:20]
+    
+    poollist= list(set(roe_list) & set(rev_list)  & set(ocf_list))
+    """
+    return poollist
+"""
+---------------------------------函数定义-次要过滤-----------------------------------------------
+"""
+
+
+"""
+---------------------------------函数定义-辅助函数-----------------------------------------------
+"""
+##买入函数
+def buy_stock(context,stockcode,cash):
+    current_time = context.current_dt
+    current_data = get_current_data()
+    
+    last_price = current_data[stockcode].last_price
+    high_limit = current_data[stockcode].high_limit
+    if stockcode[0:3] == '688':
+        if last_price == high_limit:
+            if order_target_value(stockcode,cash,LimitOrderStyle(high_limit)) != None: #涨停板挂限价单
+                log.info('%s挂限价单%s' % (current_time,stockcode))
+        else:
+            if order_target_value(stockcode,cash,MarketOrderStyle(1.1*last_price)) != None: #科创板需要设定限值
+                log.info('%s买入%s' % (current_time,stockcode))
+    else:
+        if last_price == high_limit:
+            if order_target_value(stockcode,cash,LimitOrderStyle(high_limit)) != None: #涨停板挂限价单
+                log.info('%s挂限价单%s' % (current_time,stockcode))
+        else:
+            if order_target_value(stockcode, cash) != None:
+                log.info('%s买入%s' % (current_time,stockcode))
+                
+##卖出函数
+def sell_stock(context,stockcode,cash):
+    current_time = context.current_dt
+    current_data = get_current_data()
+    
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(0.9*last_price)) != None: #科创板需要设定限值
+            log.info('%s买入%s' % (current_time,stockcode))
+    else:
+        if order_target_value(stockcode,cash) != None:
+            log.info('%s买入%s' % (current_time,stockcode))

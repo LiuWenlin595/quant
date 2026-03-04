@@ -102,8 +102,10 @@ def initialize(context):
     ### 期货交易运行 ###~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# 指数增强部分代码
+'''
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+指数增强部分代码
+'''
 # 开盘时运行函数
 def my_select(context):
     # 获取选股列表并过滤掉:st,st*,退市,涨停,跌停,停牌
@@ -264,7 +266,7 @@ def get_stock_list(context):
             #valuation.circulating_market_cap.desc()
         )
     )['code'].tolist()
-    indicator.ocf_to_operating_profit
+    # indicator.ocf_to_operating_profit
     df_stocknum =  df_stocknum.append({'满足条件股票数量': len(pb_list)}, ignore_index=True)
     #print(df_stocknum)    
    
@@ -293,9 +295,11 @@ def adjust_position_buy(context, buy_stocks):
                 if len(context.portfolio.positions) == g.stock_num:
                     break
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# 资金划转代码
-# 对冲比例调整+账户间资金划转
+'''
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+资金划转代码
+'''
+#对冲比例调整+账户间资金划转
 def rebalance(context):
     # 计算资产总价值
     total_value = context.portfolio.total_value
@@ -310,8 +314,10 @@ def rebalance(context):
     stock_value = min(context.subportfolios[0].total_value, expected_stock_value)
     
     
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# CTA部分代码
+'''
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CTA部分代码
+'''   
 
 ## 开盘前运行函数
 def before_market_open_future(context):
@@ -416,4 +422,48 @@ def loss_stop(context,ind):
     current_ATR = ATR(ind,context.current_dt, g.ATRdays)
     close = get_bars(ind, 1, '1d', ['close'],  end_dt=context.current_dt,include_now=include_now)['close']
     
-    high = max(get_bars(ind, g.boundrydays, unit, ['high'],  end_dt=context.previous_
+    high = max(get_bars(ind, g.boundrydays, unit, ['high'],  end_dt=context.previous_date,include_now=include_now)['high'])#5日最高
+    low = min(get_bars(ind, g.boundrydays, unit, ['low'],  end_dt=context.previous_date,include_now=include_now)['low'])#5日最低
+    
+    if (len(context.portfolio.long_positions) > 0) & (close < high - g.stop * current_ATR[-1][ind]):
+     loss_stop = 1 #多头止损
+    elif (len(context.portfolio.short_positions) > 0) & (close > low + g.stop * current_ATR[-1][ind]):
+     loss_stop = 1 #空头止损
+    else:
+     loss_stop = 0
+     
+    return loss_stop
+
+#开平仓信号
+def update_niu_signal(context,ind):
+    include_now = True#表示读取当天的日K线
+    unit='1d'
+
+    #-------------------标的指数的5日均线，如果均线朝下表示趋势向下，暂停交易---------------
+    ind=g.benchmark
+    close = get_bars(ind, 1, '1d', ['close'],  end_dt=context.current_dt,include_now=include_now)['close']
+    
+    #当天获取5日均线
+    current = EMA(ind,context.current_dt, timeperiod=g.long_days, unit = unit, include_now =include_now, fq_ref_date = None)[ind]
+
+    #前一天的5日均线
+    previous = EMA(ind,context.previous_date, timeperiod=g.long_days, unit=unit, fq_ref_date = None)[ind]
+
+    #当天获取2日均线
+    current_close = EMA(ind,context.current_dt, timeperiod=g.short_days, unit = unit, include_now =include_now, fq_ref_date = None)[ind]
+    #当天获取2日均线
+    previous_close = EMA(ind,context.previous_date, timeperiod=g.short_days, unit=unit, fq_ref_date = None)[ind]
+    
+    if close<current:#<previous:#当价格低于5日均线且5日均线空头排列的时候开空
+     niu_signal = -1 #开仓数量=0
+    elif close>current_close:#>previous_close:#当价格高于5日均线且5日均线多头排列的时候开多
+     niu_signal = 1 #开仓数量=1
+    else:
+     niu_signal = 0
+     
+    return niu_signal    
+
+# 获取金融期货合约到期日
+def get_CCFX_end_date(future_code):
+    # 获取金融期货合约到期日
+    return get_security_info(future_code).end_date

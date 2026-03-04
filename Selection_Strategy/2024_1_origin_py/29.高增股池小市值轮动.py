@@ -152,3 +152,83 @@ def get_high_growth_stocks(context,stock_codes):
 
 ## 获取最进N个交易日内有涨停的股票
 def get_recent_limit_up_stock(context, stock_list, recent_days):
+    stat_date = context.previous_date
+    new_list = []
+    for stock in stock_list:
+        df = get_price(stock, end_date=stat_date, frequency='daily', fields=['close','high_limit'], count=recent_days, panel=False, fill_paused=False)
+        df = df[df['close'] == df['high_limit']]
+        if len(df) > 0:
+            new_list.append(stock)
+    return new_list
+## 获取最近一段时间持有的股票
+def get_history_hold_list(context):
+    g.hold_list= []
+    for position in list(context.portfolio.positions.values()):
+        stock = position.security
+        g.hold_list.append(stock)
+    #获取最近一段时间持有过的股票列表
+    g.history_hold_list.append(g.hold_list)
+    if len(g.history_hold_list) >= g.limit_days:
+        g.history_hold_list = g.history_hold_list[-g.limit_days:]
+    temp_set = set()
+    for hold_list in g.history_hold_list:
+        for stock in hold_list:
+            temp_set.add(stock)
+    g.not_buy_again_list = list(temp_set)
+## 获取昨日涨停的持仓股
+def get_yesterday_limit_up_stocks(context):
+     #获取昨日涨停列表
+    if g.hold_list != []:
+        df = get_price(g.hold_list, end_date=context.previous_date, frequency='daily', fields=['close','high_limit'], count=1, panel=False, fill_paused=False)
+        df = df[df['close'] == df['high_limit']]
+        g.high_limit_list = list(df.code)
+    else:
+        g.high_limit_list = []
+## 检查持仓股是否涨停
+def check_limit_up(context):
+    now_time = context.current_dt
+    if g.high_limit_list != []:
+        #对昨日涨停股票观察到尾盘如不涨停则提前卖出，如果涨停即使不在应买入列表仍暂时持有
+        for stock in g.high_limit_list:
+            current_data = get_price(stock, end_date=now_time, frequency='1m', fields=['close','high_limit'], skip_paused=False, fq='pre', count=1, panel=False, fill_paused=True)
+            if current_data.iloc[0,0] < current_data.iloc[0,1]/1.1*1.1:
+                log.info("[%s]涨停打开，卖出" % (stock))
+                limit_price = current_data.iloc[0,0]*0.8
+                order_target(stock,0,MarketOrderStyle(limit_price))
+            else:
+                log.info("[%s]涨停，继续持有" % (stock))
+## 基础过滤,ST,停牌股,次新等
+def basic_filters(context,stock_list):
+    yesterday = context.previous_date
+    current_data = get_current_data()
+    return [stock for stock in stock_list
+	        if not current_data[stock].is_st
+			and 'ST' not in current_data[stock].name
+			and '*' not in current_data[stock].name
+			and '退' not in current_data[stock].name
+			and yesterday - get_security_info(stock).start_date > datetime.timedelta(days=375)
+			and not current_data[stock].paused]
+## 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list
+            if current_data[stock].last_price < current_data[stock].high_limit]
+            
+# 	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+# 	current_data = get_current_data()
+# 	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+# 			or last_prices[stock][-1] < current_data[stock].high_limit]
+## 清仓
+def clear_account(context):
+    current_data = get_current_data()
+    if g.is_empty_position == True:
+        for stock in context.portfolio.positions:
+            limit_price = current_data[stock].last_price*0.9
+            order_target(stock,0,MarketOrderStyle(limit_price))
+## 交易日判断
+def today_is_between(context, start_date, end_date):
+    today = context.current_dt.strftime('%m-%d')
+    if (start_date <= today) and (today <= end_date):
+        return True
+    else:
+        return False

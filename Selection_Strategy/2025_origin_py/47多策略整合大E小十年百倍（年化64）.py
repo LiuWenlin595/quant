@@ -1,3 +1,5 @@
+# pyy 多策略混杂，可以从一个策略看看多策略
+
 # 克隆自聚宽文章：https://www.joinquant.com/post/51000
 # 标题：多策略整合_大E小_十年百倍（年化64%回撤28%）
 # 作者：komunling
@@ -390,3 +392,307 @@ class BMZH_Strategy(Strategy):
             q = query(
                 valuation.code
             ).filter(
+                valuation.pb_ratio > 0,
+                valuation.pb_ratio < 1,
+                cash_flow.subtotal_operate_cash_inflow > 0,
+                indicator.adjusted_profit > 2.5e8,
+                income.operating_revenue > 10e8,
+                income.net_profit > 2.5e8,
+                cash_flow.subtotal_operate_cash_inflow/indicator.adjusted_profit > 2.0,
+                indicator.inc_return > 1.5,
+                indicator.inc_net_profit_year_on_year > -15,
+                valuation.code.in_(initial_list)
+            ).order_by((indicator.roa/valuation.pb_ratio).desc()).limit(self.max_select_count + 1)
+        elif self.market_temperature == "warm":
+            q = query(
+                valuation.code
+            ).filter(
+                valuation.pb_ratio > 0,
+                valuation.pb_ratio < 1,
+                cash_flow.subtotal_operate_cash_inflow > 0,
+                indicator.adjusted_profit > 2.5e8,
+                income.operating_revenue > 10e8,
+                income.net_profit > 2.5e8,
+                cash_flow.subtotal_operate_cash_inflow/indicator.adjusted_profit>1.0,
+                indicator.inc_return > 2.0,
+                indicator.inc_net_profit_year_on_year > 0,
+                valuation.code.in_(initial_list)
+            ).order_by((indicator.roa/valuation.pb_ratio).desc()).limit(self.max_select_count + 1)
+        else: # hot
+            q = query(
+                valuation.code
+            ).filter(
+                valuation.pb_ratio > 3,
+                cash_flow.subtotal_operate_cash_inflow > 0,
+                indicator.adjusted_profit > 2.5e8,
+                income.operating_revenue > 10e8,
+                income.net_profit > 2.5e8,
+                cash_flow.subtotal_operate_cash_inflow/indicator.adjusted_profit>0.5,
+                indicator.inc_return > 3.0,
+                indicator.inc_net_profit_year_on_year > 20,
+                valuation.code.in_(initial_list)
+            ).order_by(indicator.roa.desc()).limit(self.max_select_count + 1)
+
+        check_out_lists = list(get_fundamentals(q).code)
+        return check_out_lists
+
+    def Market_temperature(self, context):
+        # 获取沪深300指数的历史价格数据
+        hist = attribute_history('000300.XSHG', 600, '1d', fields=('close'), df=False)
+        index300 = hist['close']
+
+        # 1. 市场长期位置market_height: 最近5日均值相对600日内高低点所处的位置
+        market_height = (np.mean(index300[-5:]) - min(index300)) / (max(index300) - min(index300))
+        
+        # 2. 短期动量指标：RSI（相对强弱指标）
+        #   RSI通常是14天周期，这里取14天作为短期参考
+        short_hist = attribute_history('000300.XSHG', 30, '1d', fields=('close'), df=False)
+        close_30 = short_hist['close']
+        rsi = self.__calculate_RSI(close_30, period=20) #14
+        
+        # 3. 波动率指标：使用布林带宽度或简单年度化波动率来衡量市场热度
+        #   布林带宽度 = (上轨 - 下轨) / 中轨, 此处选择20天布林带作为参考
+        bb_width = self.__calculate_bollinger_width(close_30, period=30) #20
+        
+        # 根据上述三个维度指标判断市场温度
+        # 设定一些阈值(需根据实际测试微调)：
+        #   market_height低(<0.2)且RSI低于30，波动率低 => cold
+        #   market_height高(>0.8)且RSI>70, 波动率高 => hot
+        #   否则 => warm
+        # 同时可加更多条件，如RSI介于30-70之间，bb_width适中等。
+        
+        if market_height < 0.30 or (rsi < 30 and bb_width < 0.05):
+            self.market_temperature = "cold"
+        elif market_height > 0.70 or (rsi > 70 and bb_width > 0.1):
+            self.market_temperature = "hot"
+        else:
+            self.market_temperature = "warm"
+        
+        # 可根据市场温度记录一些指标，如temp，用于回测观察
+        if self.market_temperature == "hot":
+            temp = 400
+        elif self.market_temperature == "warm":
+            temp = 300
+        else:
+            temp = 200
+            
+        if context.run_params.type != 'sim_trade':
+            record(temp=temp)
+
+    def __calculate_RSI(self, prices, period=14):
+        """ 计算RSI指标 """
+        deltas = np.diff(prices)
+        ups = deltas[deltas>0].sum()
+        downs = -deltas[deltas<0].sum()
+        if downs == 0:
+            return 100
+        rs = ups/downs
+        return 100 - (100/(1+rs))
+
+    def __calculate_bollinger_width(self, prices, period=20, nbdev=2):
+        """ 
+        计算布林带宽度 
+        布林带上轨 = MA + nbdev*std
+        下轨 = MA - nbdev*std
+        中轨 = MA
+        宽度 = (上轨-下轨)/中轨
+        """
+        ma = np.mean(prices[-period:])
+        std = np.std(prices[-period:])
+        upper = ma + nbdev*std
+        lower = ma - nbdev*std
+        if ma == 0:
+            return 0
+        width = (upper - lower)/ma
+        return width
+
+class WPETF_Strategy(Strategy):
+    def __init__(self, context, subportfolio_index, name, params, etf_pool, m_days, sells, risks):
+        super().__init__(context, subportfolio_index, name, params)
+        self.etf_pool = etf_pool
+        self.m_days = m_days
+        self.sells_global = sells
+        self.risks_global = risks
+
+    def get_rank(self, etf_pool):
+        score_list = []
+        risks_d = 0
+        for etf in etf_pool:
+            df = attribute_history(etf, self.m_days, '1d', ['close'])
+            y = np.log(df['close'])
+            x = np.arange(len(y))
+            weights = np.exp(np.linspace(-1, 0, num=len(y)))        
+            coeffs = np.polyfit(x[-25:], y[-25:], 1)
+            slope, intercept = coeffs
+            coeffs_s = np.polyfit(x[-15:], y[-15:], 1)
+            slope_s, intercept_s = coeffs_s
+
+            coeffs2 = np.polyfit(x[-25:], y[-25:], 2, w=weights[-25:])
+            curve2, slope2, intercept2 = coeffs2
+
+            # 平滑曲线
+            y_smooth = np.convolve(y[-25:], np.ones(5)/5, mode='valid')
+            x_smooth = np.arange(len(y_smooth))
+            coeffs2_smooth = np.polyfit(x_smooth, y_smooth, 2, w=weights[-(len(y_smooth)):])
+            curve2_smooth, slope2_smooth, intercept2_smooth = coeffs2_smooth
+
+            moving_average = df['close'].rolling(window=20).mean()
+            recent_close = df['close'].iloc[-1]
+            recent_ma = moving_average.iloc[-1]
+
+            changes = np.diff(y[-10:])
+            gains = changes[changes > 0].sum()
+            losses = -changes[changes < 0].sum()
+            if losses == 0:
+                losses = 1e-6
+            RS = gains / losses
+            RSI = 100 - (100 / (1 + RS))
+
+            if ((recent_close > recent_ma) and ((curve2_smooth < -0.0003) or (curve2 < -0.0006))):
+                slope_adjust = 0
+            elif ((recent_close < recent_ma) and ((curve2_smooth > 0.0003) or (curve2 > 0.0006))):
+                slope_adjust = slope + 0.005
+            else:
+                slope_adjust = slope
+            annualized_returns = math.pow(math.exp(slope_adjust), 250) - 1
+            annualized_returns_s = math.pow(math.exp(slope_s), 250) - 1
+
+            y_fit = np.polyval(coeffs, x[-25:])
+            ss_res = np.sum((y[-25:] - y_fit) ** 2)
+            ss_tot = np.sum((y[-25:] - np.mean(y[-25:])) ** 2)
+            r_squared = 1 - (ss_res / ss_tot)
+
+            y_fit_s = np.polyval(coeffs_s, x[-15:])
+            ss_res_s = np.sum((y[-15:] - y_fit_s)**2)
+            ss_tot_s = np.sum((y[-15:] - np.mean(y[-15:]))**2)
+            r_squared_s = 1 - (ss_res_s / ss_tot_s)
+
+            combined_score = annualized_returns * r_squared 
+            combined_score_s = annualized_returns_s * r_squared_s 
+            if (r_squared_s >= 0.8) and (combined_score_s > combined_score):
+                combined_score = combined_score_s
+
+            if RSI > 95:
+                combined_score = 0
+            if RSI < 10:
+                combined_score = combined_score + polynomial(RSI)/8
+            if combined_score >= 25:
+                combined_score = 0
+
+            if etf in self.sells_global[-2:]:
+                combined_score = 0
+
+            risks_d += combined_score
+            score_list.append((etf, combined_score))
+
+        self.risks_global.append(risks_d)
+        sorted_list = sorted(score_list, key=lambda x:x[1], reverse=True)
+        filtered = [x[0] for x in sorted_list if x[1] > 0.01]
+        return filtered
+
+    def trade(self, context):
+        target_num = 1
+        target_list = self.get_rank(self.etf_pool)[:target_num]
+
+        subportfolio = context.subportfolios[self.subportfolio_index]
+        hold_list = list(subportfolio.long_positions)
+        sell_tag = ''
+
+        # 卖出不在目标列表中的ETF
+        for etf in hold_list:
+            if etf not in target_list:
+                order_target_value(etf, 0, pindex=self.subportfolio_index)
+                sell_tag = etf
+                print('sell ' + str(etf))
+            else:
+                print('keep: ' + str(etf))
+        if sell_tag != '':
+            self.sells_global.append(sell_tag)
+
+        # 买入目标ETF
+        hold_list = list(subportfolio.long_positions)
+        if len(hold_list) < target_num and len(target_list) > 0:
+            value = subportfolio.available_cash / (target_num - len(hold_list))
+            for etf in target_list:
+                if etf not in hold_list:
+                    order_target_value(etf, value, pindex=self.subportfolio_index)
+                    print('buy ' + str(etf))
+
+# 小市值国九条策略
+class XSZ_GJT_Strategy(Strategy):
+    def __init__(self, context, subportfolio_index, name, params):
+        super().__init__(context, subportfolio_index, name, params)
+        self.new_days = 350
+        self.highest = 50
+
+    def select(self, context):
+        if self.use_empty_month and context.current_dt.month in self.empty_month:
+            log.info('月份判断关仓期')
+            return
+        if self.stoplost_date is not None:
+            return
+        self.select_list = self.__get_rank(context)[:self.max_select_count]
+        self.print_trade_plan(context, self.select_list)
+    
+    def __get_rank(self, context):
+        # 第一个筛选
+        initial_list = self.stockpool_index(context,'399101.XSHE')
+        initial_list = self.filter_new_stock(context, initial_list, self.new_days)
+        initial_list = self.filter_locked_shares(context, initial_list, 90)
+        
+        q = query(valuation.code,valuation.market_cap).filter(
+            valuation.code.in_(initial_list),
+            valuation.market_cap.between(5,30)
+        ).order_by(valuation.market_cap.asc())
+        df_fun = get_fundamentals(q)
+        df_fun = df_fun[:100]
+        initial_list = list(df_fun.code)
+        initial_list = self.filter_paused_stock(initial_list)
+        initial_list = self.filter_highlimit_stock(context, initial_list)
+        initial_list = self.filter_lowlimit_stock(context, initial_list)
+
+        q = query(valuation.code,valuation.market_cap).filter(
+            valuation.code.in_(initial_list)
+        ).order_by(valuation.market_cap.asc())
+        df_fun = get_fundamentals(q)
+        df_fun = df_fun[:50]
+        final_list_1  = list(df_fun.code)
+
+        # 第二个筛选
+        lists2 = self.stockpool_index(context,'399101.XSHE')
+        lists2 = self.filter_new_stock(context, lists2, self.new_days)
+        lists2 = self.filter_locked_shares(context, lists2, 90)
+        
+        q = query(
+            valuation.code,
+            valuation.market_cap,
+            income.np_parent_company_owners,
+            income.net_profit,
+            income.operating_revenue
+        ).filter(
+            valuation.code.in_(lists2),
+            valuation.market_cap.between(10,50),
+            income.np_parent_company_owners > 0,
+            income.net_profit > 0,
+            income.operating_revenue > 1e8
+        ).order_by(valuation.market_cap.asc()).limit(50)
+        
+        df = get_fundamentals(q)
+        final_list_2 = list(df.code)
+
+        last_prices = history(1, unit='1d', field='close', security_list=final_list_2)
+        final_list_2 = [stock for stock in final_list_2 if (stock in self.hold_list) or (last_prices[stock].iloc[0] <= self.highest)]
+
+        target_list = list(dict.fromkeys(final_list_1 + final_list_2))
+        target_list = target_list[:self.max_select_count*3]
+        df_fun = get_fundamentals(query(
+            valuation.code,
+            indicator.roe,
+            indicator.roa,
+        ).filter(
+            valuation.code.in_(target_list)
+        ).order_by(
+            valuation.market_cap.asc()
+        ))
+        final_list = df_fun.set_index('code').index.tolist()
+        return final_list

@@ -108,13 +108,13 @@ def filter_new_stock(context,stock_list):
 
 
 def filter_st_stock(stock_list):
-	current_data = get_current_data()
-	return [stock for stock in stock_list
-			if not current_data[stock].is_st
-			and 'ST' not in current_data[stock].name
-			and '*' not in current_data[stock].name
-			and '退' not in current_data[stock].name]
-			
+    current_data = get_current_data()
+    return [stock for stock in stock_list
+            if not current_data[stock].is_st
+            and 'ST' not in current_data[stock].name
+            and '*' not in current_data[stock].name
+            and '退' not in current_data[stock].name]
+            
 def filter_kcbj_stock(stock_list):
     for stock in stock_list[:]:
         if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68':
@@ -122,26 +122,26 @@ def filter_kcbj_stock(stock_list):
     return stock_list
     
 def open_position(security, value):
-	order = order_target_value_(security, value)
-	if order != None and order.filled > 0:
-		return True
-	return False
-	
+    order = order_target_value_(security, value)
+    if order != None and order.filled > 0:
+        return True
+    return False
+    
 def order_target_value_(security, value):
-	if value == 0:
-		log.debug("Selling out %s" % (security))
-	else:
-		log.debug("Order %s to value %f" % (security, value))
-	return order_target_value(security, value)
-	
+    if value == 0:
+        log.debug("Selling out %s" % (security))
+    else:
+        log.debug("Order %s to value %f" % (security, value))
+    return order_target_value(security, value)
+    
 def close_position(position):
-	security = position.security
-	order = order_target_value_(security, 0)  # 可能会因停牌失败
-	if order != None:
-		if order.status == OrderStatus.held and order.filled == order.amount:
-			return True
-	return False
-	
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+    
 def filter_paused_stock(stock_list):
-	current_data = get_current_data()
-	return [stock for stock in stock_list if not current_data[stock].paused]
+    current_data = get_current_data()
+    return [stock for stock in stock_list if not current_data[stock].paused]

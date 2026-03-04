@@ -265,4 +265,269 @@ ric_df = predict_recorder.load_object("sig_analysis/ric.pkl")
 
 # 所有绩效指标
 print("list_metrics", predict_recorder.list_metrics())
-# IC均值：每日IC的均值，一般认为|IC|>0.03说明因子有效，注意 -0
+# IC均值：每日IC的均值，一般认为|IC|>0.03说明因子有效，注意 -0.05也认为有预测效能，说明负相关显著
+print("IC", predict_recorder.list_metrics()["IC"])
+# IC信息率：平均IC/每日IC标准差,也就是方差标准化后的ic均值，一般而言，认为|ICIR|>0.6,因子的稳定性合格
+print("ICIR", predict_recorder.list_metrics()["ICIR"])
+# 排序IC均值，作用类似IC
+print("Rank IC", predict_recorder.list_metrics()["Rank IC"])
+# 排序IC信息率，作用类似ICIR# 此图用于评价因子单调性，组1是因子值最高的一组，组5是因子值最低的一组。
+print("Rank ICIR", predict_recorder.list_metrics()["Rank ICIR"])
+
+
+# 创建测试集"预测"和“标签”对照表
+pred_label_df = pd.concat([pred_df, label_df], axis=1, sort=True).reindex(label_df.index)
+pred_label_df.head()
+
+
+# ## 查看IC及分组收益情况
+
+from scr.plotting import plot_qlib_factor_dist
+
+
+plot_qlib_factor_dist(pred_label_df,no_raise=True)
+
+
+# ## 模型特征重要性
+
+# 得到特征重要性系列
+if hasattr(model,'get_feature_importance'):
+    feature_importance = model.get_feature_importance()
+
+    fea_expr, fea_name = dataset.handler.get_feature_config() # 获取特征表达式，特征名字
+    # 特征名，重要性值的对照字典
+    feature_importance = {fea_name[int(i.split('_')[1])]: v for i,v in feature_importance.items()}
+    pd.Series(feature_importance).sort_values().iloc[-20:].plot.bar()
+
+
+# # 使用Backtrader根据预测值回测
+
+from hugos_toolkit.BackTestTemplate import StockSelectStrategy,get_backtesting,AddSignalData
+from hugos_toolkit.BackTestReport.tear import analysis_rets
+
+
+def get_backtest_data(
+    pred_df: pd.DataFrame, start_time: str, end_time: str,market='market'
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+    # 定义股票池
+    stockpool: List = D.instruments(market=market)
+    # 获取test时段的行情原始数据
+    raw_data: pd.DataFrame = D.features(
+        stockpool,
+        fields=["$open", "$high", "$low", "$close", "$volume"],
+        start_time=start_time,
+        end_time=end_time,
+    )
+    raw_data: pd.DataFrame = raw_data.swaplevel().sort_index()
+    data: pd.DataFrame = pd.merge(
+        raw_data, pred_df, how="inner", left_index=True, right_index=True
+    ).sort_index()
+    data.columns = data.columns.str.replace("$", "", regex=False)
+    data: pd.DataFrame = data.reset_index(level=1).rename(
+        columns={"instrument": "code"}
+    )
+
+    benchmark: pd.DataFrame = D.features(
+        ["SH000300"],
+        fields=["$close"],
+        start_time=start_time,
+        end_time=end_time,
+    ).reset_index(level=0, drop=True)
+
+    return data, benchmark
+
+
+TEST_PERIODS: Tuple = ("2021-01-01", "2023-02-17")
+
+
+data,benchmark = get_backtest_data(pred_df,TEST_PERIODS[0],TEST_PERIODS[1])
+
+
+benchmark_ret:pd.Series = benchmark['$close'].pct_change()
+
+
+bt_result = get_backtesting(
+    data,
+    "test",
+    strategy=StockSelectStrategy,
+    mulit_add_data=True,
+    feedsfunc=AddSignalData,
+    strategy_params={"selnum": 5, "pre": 0.05,'ascending':False,'show_log':False},
+)
+
+
+# ## 回测结果
+
+algorithm_returns: pd.Series = pd.Series(
+    bt_result.result[0].analyzers._TimeReturn.get_analysis()
+)
+
+
+report = analysis_rets(algorithm_returns,bt_result.result,benchmark_ret)
+
+
+for chart in report:
+    chart.show()
+
+
+# # Alpha158因子
+# 
+# 可以看到华西证券的价量因子虽然在指数上表现较好,但是在ETF上的表现可以说是完全失效的。所以这里我们使用Alpah158因子测试一下其在ETF上的表现如何。
+
+# ## 构建模型
+
+###################################
+# 参数配置
+###################################
+# 数据处理器参数配置：整体数据开始结束时间，训练集开始结束时间，股票池
+TARIN_PERIODS: Tuple = ("2014-01-01", "2019-12-31")
+VALID_PERIODS: Tuple = ("2020-01-01", "2020-12-31")
+TEST_PERIODS: Tuple = ("2021-01-01", "2023-02-17")
+
+
+data_handler_config: Dict = {
+    "start_time": TARIN_PERIODS[0],
+    "end_time": TEST_PERIODS[1],
+    "fit_start_time": TARIN_PERIODS[0],
+    "fit_end_time": TARIN_PERIODS[1],
+    "instruments": "market"
+}
+
+# 任务参数配置
+task_158: Dict = {
+    # 机器学习模型参数配置
+    "model": {
+        # 模型类
+        "class": "LGBModel",
+        # 模型类所在模块
+        "module_path": "qlib.contrib.model.gbdt",
+        # 模型类超参数配置，未写的则采用默认值。这些参数传给模型类
+        "kwargs": {
+           "loss": "mse",
+            "colsample_bytree": 0.8879,
+            "learning_rate": 0.0421,
+            "subsample": 0.8789,
+            "lambda_l1": 205.6999,
+            "lambda_l2": 580.9768,
+            "max_depth": 15,
+            "num_leaves": 210,
+            "num_threads": 20,
+            "early_stopping_rounds": 200,  # 训练迭代提前停止条件
+            "num_boost_round": 1000,  # 最大训练迭代次数
+        },
+    },
+    "dataset": {  # 　因子数据集参数配置
+        # 数据集类，是Dataset with Data(H)andler的缩写，即带数据处理器的数据集
+        "class": "DatasetH",
+        # 数据集类所在模块
+        "module_path": "qlib.data.dataset",
+        # 数据集类的参数配置
+        "kwargs": {
+            "handler": {  # 数据集使用的数据处理器配置
+                "class": "Alpha158",  # 数据处理器类，继承自DataHandlerLP
+                "module_path": "qlib.contrib.data.handler",  # 数据处理器类所在模块
+                "kwargs": data_handler_config,  # 数据处理器参数配置
+            },
+            "segments": {  # 数据集时段划分
+                "train": TARIN_PERIODS,  # 训练集时段
+                "valid": VALID_PERIODS,  # 验证集时段
+                "test": TEST_PERIODS,  # 测试集时段
+            },
+        },
+    },
+}
+
+
+# 实例化模型对象
+model_158 = init_instance_by_config(task_158["model"])
+# 实例化数据集，从基础行情数据计算出的包含所有特征（因子）和标签值的数据集。
+dataset_158 = init_instance_by_config(task_158["dataset"])  # 类型DatasetH
+
+
+# 保存数据方便后续使用
+dataset_158.config(dump_all=True,recursive=True)
+dataset_158.to_pickle(path="dataset_158.pkl",dump_all=True)
+
+
+with open("dataset_158.pkl", "rb") as file_dataset:
+    dataset_158 = pickle.load(file_dataset)
+
+
+# ## 执行预测工作流
+
+with R.start(experiment_name="ts_workflow"): # 注意，设好实验名
+    # 可选：记录task中的参数到运行记录下的params目录
+    R.log_params(**flatten_dict(task_158))
+
+    ############
+    # 训练
+    #############
+    model_158.fit(dataset_158)
+    
+    # 训练好的模型以pkl文件形式保存到本次实验运行记录目录下的artifacts子目录  
+    R.save_objects(trained_model=model_158)
+
+    ###############
+    # 预测
+    #############
+    # 本次实验的实验记录器
+    recorder_158 = R.get_recorder()
+    # 生成预测结果文件
+    sig_rec = SignalRecord(model_158, dataset_158, recorder_158)
+    sig_rec.generate()
+
+    # 生成预测结果分析文件
+    sigAna_rec = SigAnaRecord(recorder_158)
+    sigAna_rec.generate()
+
+    # 打印本次实验记录器信息，含记录器id，experiment_id等信息
+    print('info', R.get_recorder().info)
+
+
+# 加载pkl文件 
+with R.start():
+    recorder_158 = R.get_recorder(experiment_id='3',recorder_id='f183768a9d7844d691af2e6d18911ec7')
+    model_158 = recorder_158.load_object("trained_model")
+ 
+
+
+label_158_df:pd.DataFrame = recorder_158.load_object("label.pkl")
+label_158_df.columns = ["label"]
+pred_158_df = recorder_158.load_object("pred.pkl")
+# 创建测试集"预测"和“标签”对照表
+pred_label_158_df = pd.concat([pred_158_df, label_158_df], axis=1, sort=True).reindex(
+    label_158_df.index
+)
+
+
+# ## IC/Rank IC
+
+plot_qlib_factor_dist(pred_label_158_df)
+
+
+# ## 回测
+
+data_158,benchmark = get_backtest_data(pred_158_df,TEST_PERIODS[0],TEST_PERIODS[1])
+
+
+bt_158_result = get_backtesting(
+    data_158,
+    strategy=StockSelectStrategy,
+    mulit_add_data=True,
+    feedsfunc=AddSignalData,
+    strategy_params={"selnum": 5, "pre": 0.05, "ascending": False,'show_log':False},
+)
+
+
+algorithm_returns: pd.Series = pd.Series(
+    bt_158_result.result[0].analyzers._TimeReturn.get_analysis()
+)
+
+
+report_158 = analysis_rets(algorithm_returns,bt_158_result.result,benchmark['$close'].pct_change())
+
+
+for chart in report_158:
+    
+    chart.show()

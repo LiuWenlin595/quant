@@ -233,4 +233,43 @@ def close_position(position):
 #3-4 交易模块-调仓
 def adjust_position(context, buy_stocks, stock_num):
 	for stock in context.portfolio.positions:
-		if stock not in
+		if stock not in buy_stocks:
+			log.info("[%s]不在应买入列表中" % (stock))
+			position = context.portfolio.positions[stock]
+			close_position(position)
+		else:
+			log.info("[%s]已经持有无需重复买入" % (stock))
+
+	position_count = len(context.portfolio.positions)
+	if stock_num > position_count:
+		value = context.portfolio.cash / (stock_num - position_count)
+		for stock in buy_stocks:
+			if context.portfolio.positions[stock].total_amount == 0:
+				if open_position(stock, value):
+					if len(context.portfolio.positions) == stock_num:
+						break
+
+
+
+#4-1 打印每日持仓信息
+def print_position_info(context):
+    #打印当天成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        print('成交记录：'+str(_trade))
+    #打印账户信息
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+        print('———————————————————————————————————')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

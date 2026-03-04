@@ -561,3 +561,159 @@ def filter_limitup_stock(context, stock_list):
 	                      unit='1m', 
 	                      field='close', 
 	                      security_list=stock_list)
+	
+	current_data = get_current_data()
+	
+	# 保留两种类型的股票
+	# 已经在持仓列表中的股票
+	# 前一分钟收盘价小于涨停价的股票
+	# 如果这只股票已经在持仓列表中，即使涨停也不处理（准备继续持有）
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < current_data[stock].high_limit]
+
+
+
+#2-5 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+    
+	last_prices = history(1, 
+	                      unit='1m', 
+	                      field='close', 
+	                      security_list=stock_list)
+	
+	current_data = get_current_data()
+	
+	# 保留两种类型的股票
+	# 已经在持仓列表中的股票
+	# 前一分钟收盘价大于跌停价的股票
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] > current_data[stock].low_limit]
+
+
+
+#2-6 过滤科创北交股票
+def filter_kcbj_stock(stock_list):
+    
+    # 遍历股票列表中的每一只股票
+    for stock in stock_list:
+        # 股票首字母是字符串 4、8、68 的过滤
+        if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68':
+            # 从列表中删除这只股票
+            stock_list.remove(stock)
+            
+    # 返回过滤后的股票列表        
+    return stock_list
+
+
+
+#2-7 过滤次新股
+def filter_new_stock(context, stock_list, d):
+    
+    # 获取前一个交易日的日期
+    yesterday = context.previous_date
+    
+    # get_security_info() 获取单个标的信息
+    # display_name: 中文名称
+    # name: 缩写简称
+    # start_date: 上市日期, [datetime.date] 类型
+    # end_date: 退市日期（股票是最后一个交易日，不同于摘牌日期）， [datetime.date] 类型, 如果没有退市则为2200-01-01
+    # type: 股票、基金、金融期货、期货、债券基金、股票基金、QDII 基金、货币基金
+    # 混合基金、场外基金，'stock'/ 'fund' / 'index_futures' / 'futures' / 'etf'/'bond_fund' 
+    # 'stock_fund' / 'QDII_fund' / 'money_market_fund' / ‘mixture_fund' / 'open_fund'
+    # parent: 分级基金的母基金代码
+    return [stock for stock in stock_list if
+
+            # 昨天的日期减去股票上市日期必须大于指定的天数
+            yesterday - get_security_info(stock).start_date > datetime.timedelta(days=d)
+           ]
+
+
+# ------------------------------------------------------------------------
+# 3、交易操作相关函数
+
+
+# 3-1 自定义下单函数
+# 同系统的 order_target_value() 相比
+# 增加了在日志中写入操作说明的内容
+def order_target_value_(security, value):
+    
+    # value 为 0 则清空这只股票
+	if value == 0:
+	    # 通过 log.debug() 在日志中写入卖出股票操作
+		log.debug("Selling out %s" % (security))
+	else:
+		log.debug("Order %s to value %f" % (security, value))
+		
+	return order_target_value(security, value)
+
+
+
+# 3-2 开仓
+def open_position(security, value):
+    
+    # 针对股票下单买入
+	order = order_target_value_(security, value)
+	
+	# 分析调用函数后的返回结果
+	if order != None and order.filled > 0:
+	    # 返回下单操作的分析结果
+		return True
+		
+	return False
+
+
+
+# 3-3 平仓
+def close_position(position):
+    
+	security = position.security
+	
+	# 可能会因停牌失败
+	order = order_target_value_(security, 0)  
+	
+	# 分析调用函数后的返回结果
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+		    # 返回下单操作的分析结果
+			return True
+			
+	return False
+
+
+
+# ------------------------------------------------------------------------
+# 4、收盘记录日志相关函数
+
+# 4-1 打印每日持仓信息
+def print_position_info(context):
+    
+    # 打印当天成交记录
+    trades = get_trades()
+    
+    for _trade in trades.values():
+        print('成交记录：' + str(_trade))
+    
+    # 打印账户持仓信息
+    for position in list(context.portfolio.positions.values()):
+        
+        # 持仓股票代码
+        securities=position.security
+        # 头寸的持仓均价
+        cost=position.avg_cost
+        # 头寸的当前价格
+        price=position.price
+        # 头寸的收益率
+        ret=100*(price/cost-1)
+        # 头寸的市值
+        value=position.value
+        # 持仓股票的数量
+        amount=position.total_amount    
+        
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+        print('———————————————————————————————————')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

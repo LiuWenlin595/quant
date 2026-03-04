@@ -8,10 +8,12 @@ from jqdata import *
 from jqfactor import *
 from six import *
 
+
 # set option
 pd.set_option('display.width', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
+
 
 # parameter
 index = '000300.XSHG' # market index
@@ -19,22 +21,27 @@ mday = 21
 nday = 241
 rday = sqrt(nday)
 
+
 # last day
 h = history(1, '1d', 'close', index)
 dt_last = h.index[0].date()
 dt_last
 
+
 # all fund
 all_fund = get_all_securities('fund', dt_last)
 len(all_fund)
 
+
 all_fund.head()
+
 
 # filter, on list 1-year
 dt_1y = dt_last - dt.timedelta(days=365)
 all_fund = all_fund[all_fund.start_date < dt_1y]
 funds = all_fund.index.tolist()
 len(funds)
+
 
 # shares
 ff = finance.run_query(query(
@@ -46,12 +53,14 @@ ff = finance.run_query(query(
 shares = ff.shares
 shares.head()
 
+
 #  filter, size
 price = history(1, '1d', 'close', funds).iloc[0]
 value = price*shares
 value = value[value > 1e8].dropna()
 funds = value.index.tolist()
 len(funds)
+
 
 # filter, liquidity
 h = history(mday, '1d', 'money', funds+[index])
@@ -60,10 +69,12 @@ hx = 1e-6*h[index].mean()
 funds = [s for s in funds if hm[s] > hx]
 len(funds), hx/10000
 
+
 #  history return
 h = history(nday, '1d', 'close', funds+[index])
 r = np.log(h).diff()[1:]
 rx = r[index]
+
 
 # filter, volatility
 V = 100*rday*r.std()
@@ -74,10 +85,12 @@ V = V.sort_values()
 funds = V.index.tolist()
 len(funds)
 
+
 # weight
 w = 1.0/V
 weight = 0.95*w/w.sum()
 funds = weight.index.tolist()
+
 
 # report
 df = pd.DataFrame(index=funds)
@@ -86,6 +99,7 @@ df['Volatility'] = V
 df['Weight'] = 100*weight
 df['Name'] = all_fund.display_name[funds]
 df
+
 
 # feature
 Rp = np.dot(r[funds], weight)

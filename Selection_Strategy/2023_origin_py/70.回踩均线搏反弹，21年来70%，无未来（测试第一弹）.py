@@ -373,3 +373,18 @@ def stop_loss(context, profit=0.2, lose=0.07):
         if current_price / avg_cost < 1.05 and hold_day >= 3:
             log.info(str(stock) + '  未达个股盈利标准，平仓！')
             order_target(stock, 0)
+            continue
+        
+        # 5.持仓1天后，收益仍然小于0%，直接平仓
+        if current_price / avg_cost < 1 and hold_day == 1:
+            log.info(str(stock) + '  未达个股盈利标准，平仓！')
+            order_target(stock, 0)
+            continue
+
+
+## 计算持股天数
+def hold_days(context, stocks):
+    start_date = context.portfolio.positions[stocks].init_time
+    today = context.current_dt
+    trade_days = jqdata.get_trade_days(start_date, today)
+    return len(trade_days)

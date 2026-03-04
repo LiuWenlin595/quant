@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]: (已移除或注释)
-
 from __future__ import print_function, division
 import pandas as pd
 from pprint import pprint
@@ -318,64 +316,39 @@ def get_result(statistics_days, security_date_close_money_dict):
 
 # ## 按当日涨幅排序，统计涨幅超过5%的个股，列出板块动量前6名+最强个股（最多6个）
 
-# In[2]: (已移除或注释)
-
 result, top_security = get_result(1, security_date_close_money_dict)
 result.iloc[:, -1:].join(top_security)
-
-
-# In[3]: (已移除或注释)
 
 result.T.plot(kind='line', marker='o', title='动量趋势')
 
 
 # ## 按3日涨幅排序，统计涨幅超过8%的个股，列出板块动量前6名+最强个股（最多6个）
 
-# In[4]: (已移除或注释)
-
 result, top_security = get_result(3, security_date_close_money_dict)
 result.iloc[:, -1:].join(top_security)
-
-
-# In[5]: (已移除或注释)
 
 result.T.plot(kind='line', marker='o', title='动量趋势')
 
 
 # ## 按5日涨幅排序，统计涨幅超过10%的个股，列出板块动量前6名+最强个股（最多6个）
 
-# In[6]: (已移除或注释)
-
 result, top_security = get_result(5, security_date_close_money_dict)
 result.iloc[:, -1:].join(top_security)
-
-
-# In[7]: (已移除或注释)
 
 result.T.plot(kind='line', marker='o', title='动量趋势')
 
 
 # ## 按10日涨幅排序，统计涨幅超过15%的个股，列出板块动量前6名+最强个股（最多6个）
 
-# In[8]: (已移除或注释)
-
 result, top_security = get_result(10, security_date_close_money_dict)
 result.iloc[:, -1:].join(top_security)
-
-
-# In[9]: (已移除或注释)
 
 result.T.plot(kind='line', marker='o', title='动量趋势')
 
 
 # ## 按20日涨幅排序，统计涨幅超过20%的个股，列出板块动量前6名+最强个股（最多6个）
 
-# In[10]: (已移除或注释)
-
 result, top_security = get_result(20, security_date_close_money_dict)
 result.iloc[:, -1:].join(top_security)
-
-
-# In[11]: (已移除或注释)
 
 result.T.plot(kind='line', marker='o', title='动量趋势')

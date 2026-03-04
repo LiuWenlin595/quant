@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]: (已移除)
-
-
 from typing import Dict, List, Tuple, Union
 
 import matplotlib as mpl
@@ -33,9 +30,6 @@ mpl.rcParams['axes.unicode_minus'] = False
 # 本篇算法来源：
 # >《20180707_东北证券_金融工程_市场波动风险度量：vix与skew指数构建与应用》
 
-# In[ ]: (已移除)
-
-
 # 数据获取
 start, end = '2015-02-09', '2022-05-27'
 opt_data = prepare_data('510050.XSHG', start, end)
@@ -44,17 +38,9 @@ shibor_df = get_shibor_data(start, end)
 # 插值
 interpld_shibor = get_interpld_shibor(shibor_df)
 
-
-# In[4]: (已移除)
-
-
 # 数据储存
 opt_data.to_csv(r'../Data/opt_data.csv')
 interpld_shibor.to_csv(r'../Data/interpld_shibor.csv')
-
-
-# In[2]: (已移除)
-
 
 # 数据读取
 opt_data: pd.DataFrame = pd.read_csv(r'Data/opt_data.csv',
@@ -75,23 +61,11 @@ sz50:pd.DataFrame = sz50.set_index('datetime').drop(columns=['code'])
 hs300:pd.DataFrame = price.query('code == "000300.XSHG"').copy()
 hs300:pd.DataFrame = hs300.set_index('datetime').drop(columns=['code'])
 
-
-# In[3]: (已移除)
-
-
 # 前期数据整理
 data_all = prepare_data2calc(opt_data, interpld_shibor)
 
-
-# In[4]: (已移除)
-
-
 # 加载模块
 vix_func = CVIX(data_all)
-
-
-# In[5]: (已移除)
-
 
 # 计算vix
 vix: pd.Series = vix_func.vix()
@@ -101,9 +75,6 @@ skew: pd.Series = vix_func.skew()
 
 
 # ## VIX、STEW与上证50的关系
-
-# In[6]: (已移除)
-
 
 fig, axes = plt.subplots(2, figsize=(18, 12), sharex=False)
 
@@ -119,9 +90,6 @@ plot_indicator(sz50['close'],
 
 
 # ## VIX、STEW与沪深300的关系
-
-# In[7]: (已移除)
-
 
 fig, axes = plt.subplots(2, figsize=(18, 12), sharex=False)
 
@@ -141,9 +109,6 @@ plot_indicator(hs300['close'],
 # **上证50**
 # 
 # 可以看到VIX信号在低分位对应的未来N期收益率均值都有较好的表现;高分位有较明显的拥挤效应出现,对应的是较明显的负向收益。
-
-# In[8]: (已移除)
-
 
 # 上证50与vix的关系
 
@@ -169,9 +134,6 @@ for (k, v), ax in zip(models_dic.items(), axes):
 # **沪深300**
 # 
 # 可以看到VIX信号在低分位对应的未来N期收益率均值都有较好的表现;高分位有较明显的拥挤效应出现,对应的是较明显的负向收益。
-
-# In[9]: (已移除)
-
 
 # 沪深300与vix的关系
 
@@ -200,9 +162,6 @@ for (k, v), ax in zip(models_dic.items(), axes):
 # 
 # 由上可知在VIX低于20%分为数有较高的上涨概率,故根据上面的结论构建信号
 
-# In[6]: (已移除)
-
-
 from scr.bt_func import (get_backtesting, vix_over_quantile_bound_strategy,
                          analysis_trade,analysis_rets)
 from scr.plotting import plot_algorithm_nav, plot_qunatile_signal
@@ -214,16 +173,10 @@ from scr.plotting import plot_algorithm_nav, plot_qunatile_signal
 # - 上轨:滚动240日的85%百分位数生成上轨
 # - 下轨:滚动240日的20%百分位数生成下轨
 
-# In[7]: (已移除)
-
-
 plot_qunatile_signal(sz50['close'], vix, 60, (85, 20), '上证50指数走势与信号的关系');
 
 
 # ##### 回测
-
-# In[41]: (已移除)
-
 
 # 信号生成
 quantile_bound:pd.DataFrame = create_quantile_bound(vix,60,(85,20))
@@ -234,48 +187,21 @@ data_all:pd.DataFrame = pd.concat((sz50,quantile_bound),axis=1).dropna()
 # 回测
 res = get_backtesting(data_all,'000016.SH',vix_over_quantile_bound_strategy)
 
-
-# In[42]: (已移除)
-
-
 analysis_rets(sz50['close'],res.result)
-
-
-# In[43]: (已移除)
-
 
 analysis_trade(sz50,res.result)
 
 
 # #### 沪深300
 
-# In[44]: (已移除)
-
-
 plot_qunatile_signal(hs300['close'], vix, 60, (85, 20), '沪深300指数走势与信号的关系')
-
-
-# In[45]: (已移除)
-
 
 # 合并数据
 data_all:pd.DataFrame = pd.concat((hs300,quantile_bound),axis=1).dropna()
 
-
-# In[46]: (已移除)
-
-
 # 回测
 res1 = get_backtesting(data_all,'000300.SH',vix_over_quantile_bound_strategy)
 
-
-# In[47]: (已移除)
-
-
 analysis_rets(hs300['close'],res1.result)
-
-
-# In[48]: (已移除)
-
 
 analysis_trade(hs300,res1.result)

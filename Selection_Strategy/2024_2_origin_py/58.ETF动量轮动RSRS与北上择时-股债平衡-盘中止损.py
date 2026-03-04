@@ -245,4 +245,93 @@ def get_north_money(context):
 
     yesterday = context.previous_date
     # print(today.date(),'@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
-    n_sh = finance.run_query(query(finance.STK_ML_QUOTA).filter(finance.STK_ML_QUOTA.day>='2013-0
+    n_sh = finance.run_query(query(finance.STK_ML_QUOTA).filter(finance.STK_ML_QUOTA.day>='2013-01-10',finance.STK_ML_QUOTA.day <= yesterday,
+                                                                finance.STK_ML_QUOTA.link_id == 310001).order_by(
+        finance.STK_ML_QUOTA.day.desc()).limit(10))
+    n_sz = finance.run_query(query(finance.STK_ML_QUOTA).filter(finance.STK_ML_QUOTA.day>='2017-01-10',finance.STK_ML_QUOTA.day <= yesterday,
+                                                                finance.STK_ML_QUOTA.link_id == 310002).order_by(
+        finance.STK_ML_QUOTA.day.desc()).limit(10))
+    total_net_in = 0
+    for i in range(0, 2):
+        print("yesterday=",yesterday)
+        if str(yesterday) > '2017-01-10':
+            sh_in = n_sh['buy_amount'][i] - n_sh['sell_amount'][i]
+            sz_in = n_sz['buy_amount'][i] - n_sz['sell_amount'][i]
+            amount = sh_in + sz_in
+            total_net_in += amount
+          #  print("n+s")
+        else:
+            sh_in = n_sh['buy_amount'][i] - n_sh['sell_amount'][i]
+           
+            amount = sh_in
+            total_net_in += amount
+  
+    g.north_money = total_net_in
+    
+    
+def stock_list(context):
+    g.stocks=[]
+    check_out_list=[]
+    check_out_list.append(get_rank(context,g.stock_pool)[0])
+    check_out_list.append('513100.XSHG')
+    check_out_list.append('511260.XSHG')
+    
+    print('check_out_list:',check_out_list)
+    g.stocks=check_out_list
+    stocksdata=[20,20,0.5]
+    g.weights= pd.Series(stocksdata,index=g.stocks)
+    df = history(1, unit='1d', field='close', security_list=g.stocks, df=True, skip_paused=True, fq='post')
+    g.base_price=df.iloc[0]
+    
+
+def calc_volatility(df):
+    df_return=np.log(df/df.shift(1)).dropna()
+    s_std=df_return.std()
+    s_mean=df_return.mean()
+    for code in df_return.columns:
+        df_return[code].loc[df_return[code] > s_mean[code] + 3 * s_std[code]] = s_mean[code] + 3 * s_std[code]
+        #平均回报+3倍标准差
+        df_return[code].loc[df_return[code] < s_mean[code] - 3 * s_std[code]] = s_mean[code] - 3 * s_std[code]
+        ##平均回报-3倍标准差
+    return df_return.std() * math.sqrt(250.0) * 100
+    
+def need_balance(context):
+    position = g.position
+    x = 0.0
+    for s in position.index.values:
+        p = position.position[s]
+        #根据初始化权重和wave计算仓位
+        r = p
+        if s in context.portfolio.positions.keys():
+            #持仓股票
+            r = context.portfolio.positions[s].value / context.portfolio.total_value
+            #计算每个股票的仓位占比
+        x += abs(r - p)
+
+    return x > 0.05
+    #判断计算的仓位和实际仓位权重相差5%，是否要调仓
+
+
+def rebalance(context):
+    p = g.position
+    sells = []
+    cur =get_current_data()
+    #先减仓，释放现金，再加仓
+    for code in p.index.values:
+        position = p.position.loc[code]
+        target_value=context.portfolio.total_value*position
+        if code in context.portfolio.positions:
+            old_position = context.portfolio.positions[code].value / context.portfolio.total_value
+            if old_position > position:
+                if cur[code].last_price*100<abs(context.portfolio.positions[code].value-context.portfolio.total_value * position):
+                    order_target_value(code, context.portfolio.total_value * position)
+                    sells.append(code)
+
+    for code in p.index.values:
+        position = p.position.loc[code]
+        target_value=context.portfolio.total_value*position
+        add_value = target_value-context.portfolio.positions[code].value if code in context.portfolio.positions else target_value
+        can_add_value = add_value if context.portfolio.available_cash> add_value else context.portfolio.available_cash
+        can_buy= (code not in context.portfolio.positions and cur[code].last_price*100<context.portfolio.total_value * position)  or (code  in context.portfolio.positions and cur[code].last_price*100<abs(context.portfolio.positions[code].value-context.portfolio.total_value * position))
+        if code not in sells and can_buy and can_add_value>cur[code].last_price*100:
+            order_value(code, can_add_value)

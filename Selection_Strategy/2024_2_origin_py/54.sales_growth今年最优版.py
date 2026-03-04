@@ -57,7 +57,7 @@ def trade_close(context):
     if g.idx2_1>g.idx2_2 and context.portfolio.positions=={}:
         my_trade(context)
         
-# '------------------------------------------------------------------------------------------------------------------'
+# ------------------------------------------------------------------------------------------------------------------
 
 #1-1 选股模块
 def get_factor_filter_list(context,stock_list,jqfactor,sort,p1,p2):
@@ -150,7 +150,7 @@ def filter_new_stock(context,stock_list):
     #return [stock for stock in stock_list if not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=250)]
     return [stock for stock in stock_list if not (yesterday - get_security_info(stock).start_date).days <250]
 
-# '----------------------------------------------------------------------------------------------------------------------'
+# ----------------------------------------------------------------------------------------------------------------------
 
 #3-1 交易模块-自定义下单
 #报单成功返回报单(不代表一定会成交),否则返回None,应用于
@@ -203,7 +203,7 @@ def adjust_position(context, buy_stocks):
 					if len(context.portfolio.positions) == g.stock_num:
 						break
 
-# '---------------------------------------------------------------------------------------------------------------------'
+# ---------------------------------------------------------------------------------------------------------------------
 
 #3-5 交易模块-择时交易
 #结合择时模块综合信号进行交易

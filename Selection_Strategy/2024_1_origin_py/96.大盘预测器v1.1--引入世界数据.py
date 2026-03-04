@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[90]: (已移除或注释)
-
+# (已移除 Jupyter 标记 In[90])
 
 from jqdata import *
 from jqfactor import *
@@ -62,8 +61,7 @@ DAY = get_period_date(peroid,start_date, end_date)
 print(len(DAY))
 
 
-# In[91]: (已移除或注释)
-
+# (已移除 Jupyter 标记 In[91])
 
 
 train_data=[]
@@ -90,8 +88,7 @@ train_data = np.array(train_data)
     
 
 
-# In[92]: (已移除或注释)
-
+# (已移除 Jupyter 标记 In[92])
 
 
 df = get_price('000001.XSHG',  frequency='1d', 
@@ -147,8 +144,7 @@ print(result.shape)
 print(result[0])
 
 
-# In[93]: (已移除或注释)
-
+# (已移除 Jupyter 标记 In[93])
 
 
 # scaler = StandardScaler()  
@@ -266,7 +262,7 @@ plt.title('上证指数未来5天预测')
 plt.show()
 
 
-# In[94]: (已移除或注释)
+# (已移除 Jupyter 标记 In[94])
 
 
 for i in List:
@@ -292,4 +288,4 @@ for i in List:
     plt.show()
 
 
-# In[ ]: (已移除或注释)
+# (已移除 Jupyter 标记 In[ ])

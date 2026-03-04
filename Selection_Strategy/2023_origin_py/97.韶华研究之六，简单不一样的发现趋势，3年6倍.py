@@ -228,8 +228,9 @@ def after_market_close(context):
     log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
 
     
-# ---------------------------------函数定义-主要策略-----------------------------------------------
-
+"""
+---------------------------------函数定义-主要策略-----------------------------------------------
+"""
 #静态的，按周期去检查输入标的是否符合连阳，
 def continuous_yangs_filter(context,stocklist,check_unit,check_num,check_limit):
     today_date = context.current_dt.date()
@@ -260,12 +261,80 @@ def continuous_yangs_filter(context,stocklist,check_unit,check_num,check_limit):
     
     return poollist
     
-# ---------------------------------函数定义-次要过滤-----------------------------------------------
-
+"""
+---------------------------------函数定义-次要过滤-----------------------------------------------
+"""
 #对输入标的进行简单因子的排序和过滤
 def second_filter(context, stocklist, check_date):
     today_date = context.current_dt.date()
     lastd_date = context.previous_date
     poollist =[]
     
-    df_value = get_fundamentals(query(valuation.code,valuation.pe_ratio).filter(valuation.code.in_(stocklist)),lastd
+    df_value = get_fundamentals(query(valuation.code,valuation.pe_ratio).filter(valuation.code.in_(stocklist)),lastd_date).dropna()
+    
+    if g.sub_filter =='C':
+        pass
+    elif g.sub_filter =='B':    #先去除负值
+        pass
+    elif g.sub_filter =='E':    #先去除负值
+        df_value = df_value[df_value.pe_ratio >0]
+        if g.sub_direction ==1: 
+            df_value = df_value.sort_values(['pe_ratio'],ascending = False)
+        else:
+            df_value = df_value.sort_values(['pe_ratio'],ascending = True)
+        
+        poollist = df_value.code.tolist()
+        
+    elif g.sub_filter =='R':
+        pass
+    elif g.sub_filter =='T':
+        pass
+    
+    return poollist
+    
+#对持仓个股进行止损判断，是则列入卖信
+def lost_control(context, stocklist, check_date):
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    all_data = get_current_data()
+    poollist =[]
+    
+    if g.lostcontrol !=3:
+        for stockcode in context.portfolio.positions:
+            cost = context.portfolio.positions[stockcode].avg_cost
+            price = context.portfolio.positions[stockcode].price
+            value = context.portfolio.positions[stockcode].value
+            intime= context.portfolio.positions[stockcode].init_time
+            ret = price/cost - 1
+            duration=len(get_trade_days(intime,today_date))
+            
+            #1-静态止损，止损线可调，-0.1-0.2
+            if g.lostcontrol ==1:
+                if ret <-0.15:
+                    poollist.append(stockcode)
+                    continue
+            #2-动态止损，回落线可调，0.7-0.9
+            elif g.lostcontrol ==2:
+                df_price = get_price(stockcode, count = 10, end_date=lastd_date, frequency='daily', fields=['high','close'])
+                high_max = df_price['high'].max()
+                last_price = df_price['close'].values[-1]
+                if last_price/high_max <0.8:
+                    poollist.append(stockcode)
+                    continue
+            #3-均线止损,均线可调，10-20-60-120
+            elif g.lostcontrol ==4:
+                pass
+            #5-RSI止损，日期可调10-20-60，界线可调33-50-66
+            elif g.lostcontrol ==5:
+                pass
+    #3-趋势止损，趋势周期可调，0.5-2*trenddays
+    else:
+        pass  
+        
+    return poollist
+"""
+---------------------------------函数定义-辅助函数-----------------------------------------------
+"""
+
+###策略主体思路：取周线或月线三阳(-5-0)的票上车，分动态和静态，或辅以静损15/动损20的止损
+###周换/月换，当中止损不补票，票池按300/500/1000

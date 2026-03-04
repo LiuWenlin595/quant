@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# In[1]: (已移除或注释)
+
+
 from jqdata import *
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -12,6 +15,9 @@ warnings.filterwarnings('ignore')
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 中文字体设置-黑体
 plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
+
+
+# In[2]: (已移除或注释)
 
 
 def display_mkt(df, p_vmax=100):
@@ -38,6 +44,9 @@ def display_mkt(df, p_vmax=100):
     df[df.columns[-1]].plot()
 
 
+# In[3]: (已移除或注释)
+
+
 def display_mkt2(df, p_vmax=100):
     """
     只显示总体列，而不显示各个行业
@@ -59,12 +68,16 @@ def display_mkt2(df, p_vmax=100):
 
 # ### 指定参数
 
+# In[4]: (已移除或注释)
+
 
 end_date = '2022-09-02'  # 计算截止日
 count_ = 20 # 计算天数
 
 
 # ### 一、 准备数据
+
+# In[5]: (已移除或注释)
 
 
 by_date = get_trade_days(end_date=end_date,count=count_+20)[0]
@@ -75,14 +88,22 @@ df_close = get_price(stock_list, end_date=end_date, count=count_+20, fields='clo
 df_bias = df_close.iloc[20:] > df_close.rolling(20).mean().iloc[20:]  # C > MA20
 
 
+# In[6]: (已移除或注释)
+
+
 df_bias.tail()
 
 
 # ### 二、 按行业汇总
 
+# In[7]: (已移除或注释)
+
 
 df_industries = get_industries('sw_l1', date=end_date)
 df_industries.head()
+
+
+# In[8]: (已移除或注释)
 
 
 df=pd.DataFrame()
@@ -95,6 +116,9 @@ for idx, row in df_industries.iterrows():
         df[row['name']] = (100*(df_bias[ind_avail_stocks].sum(axis=1))/len(ind_avail_stocks)).astype(int)
 #
 df.sort_index(ascending=False, inplace=True)
+
+
+# In[9]: (已移除或注释)
 
 
 df.head()
@@ -110,6 +134,8 @@ df.head()
 # 关键是参数vmax。多少个行业，每个行业的及格率最大值可达100，所以汇总后，总体的最大值顶格(vmax)=行业数*100
 # 
 # 显示时，heatmap根据各个值相对于vmax的水平，赋予了表示冷暖的不同颜色。
+
+# In[10]: (已移除或注释)
 
 
 df_1 = df.copy(deep=True)   # 为不破坏原数据，以比较3种方案，所以先copy
@@ -129,6 +155,8 @@ display_mkt(df_1, p_vmax=vmax)
 # 
 # 举个例子。申万一级行业31个，每个行业的及格率都可能到100，所以汇总后，可能的最大值(vmax)是3100，而2022年9月2日的及格率加总是1127，而1127/3100=36%，那就在“总体”列中直接显示36。表示居于vmax的36%水平。
 
+# In[11]: (已移除或注释)
+
 
 df_2 = df.copy(deep=True)
 # 方案 2
@@ -142,8 +170,13 @@ display_mkt(df_2, p_vmax=100)
 # 
 # 例如，2022-9-2，合格的股票共4654只，其中及格的（Close>MA20）是1360只，1360/4654=29%，于是“总体”显示为29。
 
+# In[12]: (已移除或注释)
+
 
 df_3 = df.copy(deep=True)
 # 方案 3
 df_3['总体']=(100*df_bias.sum(axis=1)/len(df_bias.columns)).astype(int)
 display_mkt(df_3, p_vmax=100)  # v_max：最大值顶格100
+
+
+# In[ ]: (已移除或注释)

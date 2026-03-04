@@ -403,4 +403,65 @@ class QuantLib(object):
             # 买入
             if myAmount <= newAmount:
                 myAvg_cost = ((myAvg_cost * myAmount) + myPrice * (newAmount - myAmount)) / newAmount
-                # g.positions[stock] = context
+                # g.positions[stock] = context.portfolio.positions[stock].price
+                tmpDict[stock]['buy_times'] += 1
+            # 卖光
+            elif newAmount == 0:
+                if myPrice >= myAvg_cost:
+                    tmpDict[stock]['win'] += 1
+                else:
+                    tmpDict[stock]['loss'] += 1
+                myMargin = (myPrice - myAvg_cost) * myAmount
+                if myMargin < 0:
+                    if myMargin <= tmpDict[stock]['max_loss']:
+                        tmpDict[stock]['max_loss'] = float(round(myMargin, 2))
+                        tmpDict[stock]['max_loss_date'] = context.current_dt
+
+                tmpDict[stock]['Margin'] += float(round(myMargin, 2))
+                tmpDict[stock]['sell_times'] += 1
+            # 没卖光
+            elif myAmount > newAmount:
+                myAvg_cost = ((myAvg_cost * myAmount) - (myPrice * (myAmount - newAmount))) / newAmount
+                # g.positions[stock] = context.portfolio.positions[stock].price
+                tmpDict[stock]['sell_times'] += 1
+
+        g.tradeRecord += stock + " 持股从 " + str(myAmount) + " 变为 " + str(newAmount) + \
+                         " 占比 " + str(
+            100 * round((myPrice * newAmount) / context.portfolio.total_value, 2)) + "%\n"
+
+        # renew after trade
+        if newAmount == 0:
+            myAvg_cost = 0
+            tmpDict[stock]['standPrice'] = 0
+        elif myAvg_cost > tmpDict[stock]['standPrice']:
+            tmpDict[stock]['standPrice'] = float(myAvg_cost)
+
+        myAmount = newAmount
+        tmpDict[stock]['amount'] = float(myAmount)
+        tmpDict[stock]['avg_cost'] = float(myAvg_cost)
+        g.transactionRecord = tmpDict.copy()
+
+    def fun_createTransactionRecord(self, context, stock):
+        # type: (Context, str) -> NoReturn
+        g.transactionRecord[stock] = {'amount': 0, 'avg_cost': 0, 'buy_times': 0,
+                                      'sell_times': 0, 'win': 0, 'loss': 0, 'max_loss': 0, 'max_loss_date': 0,
+                                      'Margin': 0,
+                                      'standPrice': 0}
+
+    def fun_print_transactionRecord(self, context):
+        # type: (Context) -> str
+        tmpDict = g.transactionRecord.copy()
+        tmpList = list(tmpDict.keys())
+        message = "\n" + "stock, Win, loss, buy_times, sell_times, Margin, max_loss, max_loss_date, avg_cost\n"
+        for stock in tmpList:
+            message += stock + ", "
+            message += str(tmpDict[stock]['win']) + ", " + str(tmpDict[stock]['loss']) + " , "
+            message += str(tmpDict[stock]['buy_times']) + ", " + str(tmpDict[stock]['sell_times']) + ", "
+            message += str(tmpDict[stock]['Margin']) + ", "
+            message += str(tmpDict[stock]['max_loss']) + ", " + str(tmpDict[stock]['max_loss_date']) + ", "
+            message += str(tmpDict[stock]['avg_cost']) + "\n"
+        message += "Returns = " + str(round(context.portfolio.returns, 5) * 100) + "%\n"
+
+        g.transactionRecord = tmpDict.copy()
+
+        return message

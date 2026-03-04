@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# (已移除 Jupyter 标记 In[2])
+
+
 #1/pe-国债估值模型  https://www.joinquant.com/view/community/detail/b6186a348b1520a6982b818b8206dfe5?type=1
 #点全部运行即可。
 #这一段获取PE
@@ -51,6 +54,9 @@ for csrq in dates:
         
 
  #print('pe_list:\n%s' % pe_list)
+
+
+# (已移除 Jupyter 标记 In[5])
 
 
 #这一段获取国债
@@ -115,6 +121,9 @@ def get_bond_yield(start_date: str, end_date: str):
     return df.dropna(axis=1)
 
 
+# (已移除 Jupyter 标记 In[6])
+
+
 #这一段计算1/pe-国债
 bond_yield = get_bond_yield(my_start_time,my_end_time)
 bond_yield.set_index(['日期'], inplace=True)
@@ -138,6 +147,9 @@ df_pe.set_index(["日期"], inplace=True)
 #债券网会有周六的数据，因此len(df_ten_bond)>len(df_pe),所以用df_pe在join左边
 last_dataframe=df_pe.join(df_ten_bond)
 last_dataframe.head()
+
+
+# (已移除 Jupyter 标记 In[12])
 
 
 # 0.准备画图
@@ -224,3 +236,6 @@ for label in ax.get_xticklabels() + ax.get_yticklabels():
     #label.set_bbox(dict(facecolor = 'green', edgecolor = 'None', alpha = 0.2))
 plt.legend(loc='upper left',fontsize='x-small')
 plt.show()
+
+
+# (已移除 Jupyter 标记 In[ ])

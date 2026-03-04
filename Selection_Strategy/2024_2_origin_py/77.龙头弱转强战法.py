@@ -188,4 +188,61 @@ def get_sell_list(context, securitylist):
     today = context.current_dt.strftime('%Y-%m-%d')
 
     #获取2天的数据，包括今天; 昨天的在前，今天的在后
-    todayclose=get_bars(securitylist,
+    todayclose=get_bars(securitylist, 2,  unit='1d',fields=['high','close'], include_now=True)
+    #hisclose=get_bars(securitylist, 1,  unit='1d',fields=['close'], include_now=False)
+    #VOLT,MAVOL5,MAVOL10 = VOL(securitylist, check_date=today, M1=5, M2=10, include_now = False)
+
+    for security in securitylist:
+        if ((todayclose[security][1][1]/todayclose[security][0][1]) < 1.098): #未涨停就卖 
+            listgot.append(security)
+    return listgot
+
+#获取卖票的列表
+def get_sell_list2(context, securitylist):
+    listgot = []
+    if len(securitylist) <= 0:
+        return listgot
+    today = context.current_dt.strftime('%Y-%m-%d')
+
+    #获取2天的数据，包括今天; 昨天的在前，今天的在后
+    todayclose=get_bars(securitylist, 2,  unit='1d',fields=['high','close'], include_now=True)
+    #hisclose=get_bars(securitylist, 1,  unit='1d',fields=['close'], include_now=False)
+    #VOLT,MAVOL5,MAVOL10 = VOL(securitylist, check_date=today, M1=5, M2=10, include_now = False)
+
+    for security in securitylist:
+        if ((todayclose[security][1][1] < todayclose[security][0][1])): #跌破昨日收盘价 
+            log.info("Less than lastday close %s" % (g.stockdict[security]))
+            listgot.append(security)
+    return listgot
+
+##卖股票函数
+def sellstock(context):
+    sell_list = get_sell_list(context, g.bought_stocks_o)
+    if len(sell_list)>0:
+        for security in sell_list:
+            boughtcost = context.portfolio.positions[security].acc_avg_cost
+            profit = (context.portfolio.positions[security].price - boughtcost)/boughtcost *100
+            log.info("Sell %s " % (g.stockdict[security]), "profit: %.1f%%" % profit, "init time %s" % context.portfolio.positions[security].init_time)
+            ordert = order_target_value(security,0)
+            if (None == ordert):
+                log.info("Sell failed %s" % (g.stockdict[security]))
+            else:
+                g.bought_stocks_o.remove(security)
+    else:
+        log.info("no one to sell")
+    return
+
+##盘中，跌破昨日收盘价卖
+def sellstock2(context):
+    sell_list = get_sell_list2(context, g.bought_stocks_o)
+    if len(sell_list)>0:
+        for security in sell_list:
+            boughtcost = context.portfolio.positions[security].acc_avg_cost
+            profit = (context.portfolio.positions[security].price - boughtcost)/boughtcost *100
+            log.info("Sell %s " % (g.stockdict[security]), "profit: %.1f%%" % profit, "init time %s" % context.portfolio.positions[security].init_time)
+            ordert = order_target_value(security,0)
+            if (None == ordert):
+                log.info("Sell failed %s" % (g.stockdict[security]))
+            else:
+                g.bought_stocks_o.remove(security)
+    return

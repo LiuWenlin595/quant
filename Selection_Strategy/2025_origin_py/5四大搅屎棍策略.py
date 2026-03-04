@@ -156,3 +156,116 @@ def get_stock_list(context):
                 indicator.roa > 0.10,
             ).order_by(
         valuation.market_cap.asc()).limit(g.stock_num)).set_index('code').index.tolist()
+        BIG_stock_list = filter_paused_stock(BIG_stock_list)
+        BIG_stock_list = filter_limitup_stock(context,BIG_stock_list)
+        L = filter_limitdown_stock(context,BIG_stock_list)
+    else:
+        print('跑')
+        L=[]
+    return L
+
+# 1-3 整体调整持仓
+def weekly_adjustment(context):
+    target_B = get_stock_list(context)
+    # 调仓卖出
+    for stock in g.hold_list:
+        if (stock not in target_B) and (stock not in g.yesterday_HL_list):
+            position = context.portfolio.positions[stock]
+            close_position(position)
+    position_count = len(context.portfolio.positions)
+    target_num = len(target_B)
+    if target_num > position_count:
+        buy_num = min(len(target_B), g.stock_num*g.num - position_count)
+        value = context.portfolio.cash / buy_num
+        for stock in target_B:
+            if stock not in list(context.portfolio.positions.keys()):
+                if open_position(stock, value):
+                    if len(context.portfolio.positions) == target_num:
+                        break
+ 
+def check_limit_up(context):
+    now_time = context.current_dt
+    if g.yesterday_HL_list != []:
+        # 对昨日涨停股票观察到尾盘如不涨停则提前卖出，如果涨停即使不在应买入列表仍暂时持有
+        for stock in g.yesterday_HL_list:
+            current_data = get_price(stock, end_date=now_time, frequency='1m', fields=['close', 'high_limit'],
+                                     skip_paused=False, fq='pre', count=1, panel=False, fill_paused=True)
+            if current_data.iloc[0, 0] < current_data.iloc[0, 1]:
+                log.info("[%s]涨停打开，卖出" % (stock))
+                position = context.portfolio.positions[stock]
+                close_position(position)
+            else:
+                log.info("[%s]涨停，继续持有" % (stock))
+
+# 3-1 交易模块-自定义下单
+def order_target_value_(security, value):
+    if value == 0:
+        log.debug("Selling out %s" % (security))
+    else:
+        log.debug("Order %s to value %f" % (security, value))
+    return order_target_value(security, value)
+
+
+# 3-2 交易模块-开仓
+def open_position(security, value):
+    order = order_target_value_(security, value)
+    if order != None and order.filled > 0:
+        return True
+    return False
+
+
+# 3-3 交易模块-平仓
+def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+
+
+# 2-1 过滤停牌股票
+def filter_paused_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list if not current_data[stock].paused]
+
+
+# 2-2 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list
+            if not current_data[stock].is_st
+            and 'ST' not in current_data[stock].name
+            and '*' not in current_data[stock].name
+            and '退' not in current_data[stock].name]
+
+
+# 2-3 过滤科创北交股票
+def filter_kcbj_stock(stock_list):
+    for stock in stock_list[:]:
+        if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68' or stock[0] == '3':
+            stock_list.remove(stock)
+    return stock_list
+
+
+# 2-4 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    current_data = get_current_data()
+    return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+            or last_prices[stock][-1] < current_data[stock].high_limit]
+
+
+# 2-5 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    current_data = get_current_data()
+    return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+            or last_prices[stock][-1] > current_data[stock].low_limit]
+
+
+# 2-6 过滤次新股
+def filter_new_stock(context, stock_list):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if
+            not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=375)]

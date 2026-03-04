@@ -4,18 +4,17 @@
 
 # 标题：小庄均线趋势策略
 # 作者：mrzhai
-'''
-1.阿波罗11计算股票评分
-2.股票筛选
-3.短线多头5>13>21
-4.前5日，量能为前天3倍，上涨大于7%，
-5.前4日，下跌，收盘小于前日收盘，量能缩小为前日的70%
-6.前3日，下跌，跌幅小于前日且小于3%，收盘价小于前日，量能缩小为前日50%
-7.前2日，上涨，收盘价大于前日，量能大于前日
-8.前1日，上涨，收盘价大于前日，且收盘价大于前5日收盘价，上涨大于5%，量能大于前日1.5倍
-9.当日，开盘价大于昨日收盘价，且小于3%
-10.收盘不破13日线不走，破线止损
-'''
+# 1.阿波罗11计算股票评分
+# 2.股票筛选
+# 3.短线多头5>13>21
+# 4.前5日，量能为前天3倍，上涨大于7%，
+# 5.前4日，下跌，收盘小于前日收盘，量能缩小为前日的70%
+# 6.前3日，下跌，跌幅小于前日且小于3%，收盘价小于前日，量能缩小为前日50%
+# 7.前2日，上涨，收盘价大于前日，量能大于前日
+# 8.前1日，上涨，收盘价大于前日，且收盘价大于前5日收盘价，上涨大于5%，量能大于前日1.5倍
+# 9.当日，开盘价大于昨日收盘价，且小于3%
+# 10.收盘不破13日线不走，破线止损
+
 # 导入聚宽函数库
 import jqdata
 import pandas as pd
@@ -313,3 +312,102 @@ def initialize(context):
 
 ## 获取 购买标的
 def before_trading_start(context):
+    # 调仓时间
+    t_date = context.current_dt.strftime('%Y-%m-%d')
+    # 上一个调仓日期
+    p_date = context.previous_date.strftime('%Y-%m-%d')
+    # 获取目标标的
+    g.security_first = select_ticks(p_date)
+
+
+## 交易函数
+def trade(context):
+    log.info("当前持股数： %s" % len(context.portfolio.positions))
+    log.info("当前资金量： %s" % (context.portfolio.available_cash))
+    # 止盈止损
+    stop_loss(context)
+    # 获取最终符合标准的股票
+    g.security = get_open_high_history(context, g.security_first);
+    # 是否存在符合条件的股票
+    if len(g.security) > 0:
+        # 判断当前有持仓股票只有1只
+        if len(context.portfolio.positions) == 1:
+            # 其余资金买入
+            value = context.portfolio.available_cash / 2  #资金分成两份
+            for security in g.security[:2]:
+                order_value(security, value, side='long')
+                log.info("买入 %s" % (g.security))
+        # 判断当前有持仓股票只有2只
+        elif len(context.portfolio.positions) == 2:
+            # 其余资金买入
+            value = context.portfolio.available_cash  #资金量
+            for security in g.security[:1]:
+                order_value(security, value, side='long')
+                log.info("买入 %s" % (g.security))
+        # 判断当前有持仓股票大于2只
+        elif len(context.portfolio.positions) > 2:
+            log.info("当前已满仓 %s" % (context.portfolio.positions.keys()))
+        else:
+            value = context.portfolio.available_cash / 3  #资金分成三份
+            for security in g.security:
+                order_value(security, value, side='long')
+            log.info("买入 %s" % (g.security))
+
+
+## 止盈止损
+# 1.收益小于等于-7%直接平仓
+# 2.收益大于15%后，回撤大于5%时平仓；收益大于20%后，回撤大于3%时平仓
+# 3.持仓1天后，价格小于21日线，直接平仓
+# 4.持仓股数小于3时，从股票池买入，直到持股数为3
+def stop_loss(context, profit=0.2, lose=0.07):
+    for stock in context.portfolio.positions.keys():
+        df = get_price(stock, start_date=context.portfolio.positions[stock].init_time,\
+                               end_date=context.previous_date, frequency='minute', fields=['high'], skip_paused=True)
+        df_max_high = df["high"].max()  #从买入至今的最高价
+
+        
+        # 股票每天基本价格信息
+        avg_cost = context.portfolio.positions[stock].avg_cost  #持仓股票的平均成本
+        current_price = context.portfolio.positions[stock].price  #持仓股票的当前价
+        hold_day = hold_days(context, stock)  #计算持股天数
+        
+        # 1.收益小于等于-7%直接平仓
+        if current_price / avg_cost < (1 - lose):
+            log.info(str(stock) + '  达个股止损线，平仓止损！')
+            order_target(stock, 0)
+            continue
+
+        # 2.收益大于20%后，回撤大于3%时平仓
+        if df_max_high / avg_cost > (1 + profit) and (
+                df_max_high - current_price) / current_price > 0.03:
+            log.info(str(stock) + '  回撤达个股止盈线，平仓止盈！')
+            order_target(stock, 0)
+            continue
+
+        # 3.收益大于15%后，回撤大于5%时平仓
+        if df_max_high / avg_cost > 1.15 and df_max_high / avg_cost <= (
+                1 + profit) and (df_max_high -
+                                 current_price) / current_price > 0.05:
+            log.info(str(stock) + '  回撤达个股止盈线，平仓止盈！')
+            order_target(stock, 0)
+            continue
+
+        # 4.持仓3天后，收益仍然小于5%，直接平仓
+        if current_price / avg_cost < 1.05 and hold_day >= 3:
+            log.info(str(stock) + '  未达个股盈利标准，平仓！')
+            order_target(stock, 0)
+            continue
+        
+        # 5.持仓1天后，收益仍然小于0%，直接平仓
+        if current_price / avg_cost < 1 and hold_day == 1:
+            log.info(str(stock) + '  未达个股盈利标准，平仓！')
+            order_target(stock, 0)
+            continue
+
+
+## 计算持股天数
+def hold_days(context, stocks):
+    start_date = context.portfolio.positions[stocks].init_time
+    today = context.current_dt
+    trade_days = jqdata.get_trade_days(start_date, today)
+    return len(trade_days)

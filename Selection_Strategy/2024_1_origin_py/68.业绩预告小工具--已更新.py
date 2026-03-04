@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]: (已移除或注释)
+# In[1]: (已清理)
 
 
 from jqdata import *
@@ -31,7 +31,7 @@ button.observe(button_action, "value")
 display(button)
 
 
-# In[2]: (已移除或注释)
+# In[2]: (已清理)
 
 
 def forcast(date=datetime.datetime.today()):
@@ -69,7 +69,7 @@ def forcast(date=datetime.datetime.today()):
     return df
 
 
-# In[3]: (已移除或注释)
+# In[3]: (已清理)
 
 
 def get_profit(code,date=datetime.datetime.today()):
@@ -121,7 +121,7 @@ def get_profit(code,date=datetime.datetime.today()):
     return dfs
 
 
-# In[4]: (已移除或注释)
+# In[4]: (已清理)
 
 
 def show_profit(dfs,code):
@@ -140,7 +140,7 @@ def show_profit(dfs,code):
     return plt.show()
 
 
-# In[5]: (已移除或注释)
+# In[5]: (已清理)
 
 
 #耗时较长
@@ -158,7 +158,7 @@ def show_inds(df,indus):
     return df
 
 
-# In[6]: (已移除或注释)
+# In[6]: (已清理)
 
 
 def show_chart(code):
@@ -168,13 +168,13 @@ def show_chart(code):
     show_profit(porit,code)
 
 
-# In[7]: (已移除或注释)
+# In[7]: (已清理)
 
 
 get_ipython().run_cell_magic('time', '', "\nend_date = '2023-6-30'#业绩预告\n\nfa =show_inds(forcast(end_date),'sw_l3')")
 
 
-# In[8]: (已移除或注释)
+# In[8]: (已清理)
 
 
 # 获取每个下拉框的选项
@@ -289,4 +289,4 @@ update_display()
 print('end')
 
 
-# In[ ]: (已移除或注释)
+# In[ ]: (已清理)

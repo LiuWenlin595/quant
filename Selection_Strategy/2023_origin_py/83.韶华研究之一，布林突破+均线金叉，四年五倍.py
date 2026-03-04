@@ -257,4 +257,259 @@ def after_close_eye(context):
         #在仓内、三年内、表内去除
         if stockcode in context.portfolio.positions:
             continue
-        if (today_date - get_security_info(stock
+        if (today_date - get_security_info(stockcode).start_date).days <= 600:
+            continue
+        s2_num = s2_num+1
+        if stockcode in wait_list:
+            continue
+        
+        #排除非BOLL通道收窄+未突破上轨
+        upperband, middleband, lowerband = Bollinger_Bands(stockcode, check_date=today_date, timeperiod=60, nbdevup=2, nbdevdn=2)
+        if (upperband[stockcode] - lowerband[stockcode])/middleband[stockcode] > 0.1:
+            continue
+        if all_data[stockcode].last_price < upperband[stockcode]:
+            continue
+        s3_num = s3_num+1
+        
+        Trix_signal,MACD_signal,EMV_signal,KD_signal= Technical_signal(stockcode,today_date)
+        if Trix_signal ==1 or MACD_signal ==1:
+            print('%s中标' % stockcode)
+            s4_num = s4_num+1
+            
+            df_value = get_valuation(stockcode, end_date=today_date, count=1, fields=['circulating_market_cap', 'pe_ratio','pb_ratio'])
+            q_f10=query(finance.STK_SHAREHOLDER_FLOATING_TOP10).filter(finance.STK_SHAREHOLDER_FLOATING_TOP10.code==stockcode,finance.STK_SHAREHOLDER_FLOATING_TOP10.pub_date>rep_back_date).limit(10)
+            df_f10=finance.run_query(q_f10)
+            sum_f10 = df_f10['share_ratio'].sum()
+            CYF_code = CYF(stockcode, check_date=today_date, N = 10, unit = '1d', include_now = True)
+            write_file('bug_eye.csv',str('%s,%s,%s,%s,%s,%s,%s\n' % (today_date,stockcode,df_value.iloc[0,2],df_value.iloc[0,3],df_value.iloc[0,4],CYF_code[stockcode],sum_f10)),append = True)
+    
+    print('原始:%s,去新:%s,龟头:%s,金叉:%s' % (s1_num,s2_num,s3_num,s4_num))
+    
+## 收盘后运行脑函数
+def after_close_brain(context):
+    log.info(str('函数运行时间(after_close_brain):'+str(context.current_dt.time())))
+    #预设全局数据,观察周期为往前追溯10天
+    today_date = context.current_dt.date()
+    all_data = get_current_data()
+    benchcode_titan = '000300.XSHG'
+    benchcode_bug = '000852.XSHG'
+    g.buylist = []
+    g.selllist = []
+    
+    #1，读取eye文件，得到今日信号
+    df_waiting = pd.read_csv(BytesIO(read_file('bug_eye.csv')))
+    df_waiting['date'] = pd.to_datetime(df_waiting['date']).dt.date
+    df_waiting = df_waiting[(df_waiting['date'] == today_date)]
+    df_waiting = df_waiting.sort_values(['cir_m'], ascending = True) #按市值大小递减排序，以便多个信号时按市值取需
+    
+    #判断大小基准的30日涨幅动量，然后用1000-300，为正表示小>大，为负表示小<大
+    #计算大小基准的当日涨幅
+    df_titan_price = get_price(benchcode_titan, count = 30, end_date=today_date, frequency='daily', fields=['close'])
+    df_bug_price = get_price(benchcode_bug, count = 30, end_date=today_date, frequency='daily', fields=['close'])
+    
+    rise_titan = (df_titan_price['close'].values[-1] - df_titan_price['close'].values[0])/df_titan_price['close'].values[0]
+    rise_bug = (df_bug_price['close'].values[-1] - df_bug_price['close'].values[0])/df_bug_price['close'].values[0]
+    rise_gap = rise_bug - rise_titan
+
+    rise_titan_last = (df_titan_price['close'].values[-1] - df_titan_price['close'].values[-2])/df_titan_price['close'].values[-2]
+    rise_bug_last = (df_bug_price['close'].values[-1] - df_bug_price['close'].values[-2])/df_bug_price['close'].values[-2]
+    rise_gap_last = rise_bug_last - rise_titan_last
+    
+    #根据小盘指数30日状态，分阶段分因子提取出各阶段买信号
+    for i in range(len(df_waiting)):
+        stockcode = df_waiting.iloc[i,1]
+        cir_m = df_waiting.iloc[i,2]
+        last_price = all_data[stockcode].last_price
+        pe_ratio = df_waiting.iloc[i,3]
+        cyf = df_waiting.iloc[i,5]
+        f10 = df_waiting.iloc[i,6]
+        
+        if stockcode in context.portfolio.positions:
+            continue
+        
+        #通用过滤，PE太大，或人气太热，或股价过低(资源股，近ST)去除
+        if pe_ratio >200 or cyf >66 or last_price < 3:
+            continue
+        
+        if rise_bug < -0.05:
+            if rise_bug_last > 0:
+                if cir_m >56 and pe_ratio >20 and cyf >20:
+                    g.buylist.append(stockcode)
+                    write_file('bug_brain.csv',str('%s,buy,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入list执行
+                    write_file('bug_log.csv', str('%s,买入信号,%s,%s,%s,%s,%s\n' % (today_date,stockcode,cir_m,pe_ratio,cyf,f10)),append = True)
+                    continue
+            else:
+                continue
+        elif rise_bug <=0:
+            if cir_m <160 and cyf >24 and f10 >45:
+                if pe_ratio >0 and pe_ratio <22:
+                    g.buylist.append(stockcode)
+                    write_file('bug_brain.csv',str('%s,buy,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入list执行
+                    write_file('bug_log.csv', str('%s,买入信号,%s,%s,%s,%s,%s\n' % (today_date,stockcode,cir_m,pe_ratio,cyf,f10)),append = True)
+                    continue
+            else:
+                continue
+        elif rise_bug <= 0.07:
+            if rise_gap > -0.01:
+                if cyf >31 and f10 >22:
+                    if pe_ratio >0 and pe_ratio <44:
+                        g.buylist.append(stockcode)
+                        write_file('bug_brain.csv',str('%s,buy,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入list执行
+                        write_file('bug_log.csv', str('%s,买入信号,%s,%s,%s,%s,%s\n' % (today_date,stockcode,cir_m,pe_ratio,cyf,f10)),append = True)
+                        continue
+            else:
+                continue
+        else:
+            if cir_m <170 and last_price >9 and cyf>24:
+                g.buylist.append(stockcode)
+                write_file('bug_brain.csv',str('%s,buy,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入list执行
+                write_file('bug_log.csv', str('%s,买入信号,%s,%s,%s,%s,%s\n' % (today_date,stockcode,cir_m,pe_ratio,cyf,f10)),append = True)
+                continue
+    
+    #判断仓内各股的卖信号，止损/止盈/回撤止损/盈速止盈
+    buy_num = len(g.buylist)
+    for stockcode in context.portfolio.positions:
+        cost = context.portfolio.positions[stockcode].avg_cost
+        price = context.portfolio.positions[stockcode].price
+        value = context.portfolio.positions[stockcode].value
+        intime= context.portfolio.positions[stockcode].init_time
+        ret = price/cost - 1
+        duration=len(get_trade_days(intime,today_date))
+        #两种盈速计算方式：起价和低价
+        rise_ratio = ret/duration
+        
+        #df_price = get_price(stockcode, count = duration, end_date=today_date, frequency='daily', fields=['close'])
+        #close_min = df_price['close'].min()
+        #rise_ratio = (price/close_min-1)/duration
+
+        #创板股提高盈速要求
+        if (stockcode[0:3] == '688' or stockcode[0:3] == '300') and today_date >= datetime.date(2020,9,1):
+            rise_ratio = rise_ratio/2
+
+        #今日跌停即加入卖出清单,然后止盈止损，盈速判断
+        #BOLL蛰伏，优质筛选后可以不用考虑跌停控制
+        """
+        df_price = get_price(stockcode, count = 1, end_date=today_date, frequency='daily', fields=['low_limit', 'high_limit', 'close']) #先老后新
+        if all_data[stockcode].paused != True and df_price.iloc[-1,2] <= df_price.iloc[-1,0]:
+            #g.selllist.append(stockcode)
+            write_file('bug_brain.csv',str('%s,sell,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入四大list执行
+            write_file('bug_log.csv', str('%s,跌停信号,%s,周期:%s,盈利:%s\n' % (today_date,stockcode,duration,ret)),append = True)
+            continue
+        """
+        
+        if ret < -0.1:
+            #g.selllist.append(stockcode)
+            write_file('bug_brain.csv',str('%s,sell,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入四大list执行
+            write_file('bug_log.csv', str('%s,止损信号,%s,周期:%s,盈利:%s\n' % (today_date,stockcode,duration,ret)),append = True)
+            continue
+        elif ret > 0.5:
+            #g.selllist.append(stockcode)
+            write_file('bug_brain.csv',str('%s,sell,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入四大list执行
+            write_file('bug_log.csv', str('%s,超盈信号,%s,周期:%s,盈利:%s\n' % (today_date,stockcode,duration,ret)),append = True)
+            continue
+        
+        if duration > 3:
+            if ret < -0.05:
+                #g.selllist.append(stockcode)
+                write_file('bug_brain.csv',str('%s,sell,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入四大list执行
+                write_file('bug_log.csv', str('%s,长损信号,%s,周期:%s,盈利:%s\n' % (today_date,stockcode,duration,ret)),append = True)
+                continue
+            elif ret < -0.03:
+                Trix_signal,MACD_signal,EMV_signal,KD_signal= Technical_signal(stockcode,today_date)
+                if buy_num == 0:
+                    continue
+                
+                if Trix_signal == -1 or MACD_signal == -1:
+                    #g.selllist.append(stockcode)
+                    write_file('bug_brain.csv',str('%s,sell,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入四大list执行
+                    write_file('bug_log.csv', str('%s,死叉信号,%s,周期:%s,盈利:%s\n' % (today_date,stockcode,duration,ret)),append = True)
+                    continue                    
+            else:
+                df_price = get_price(stockcode, count = 10, end_date=today_date, frequency='daily', fields=['close'])
+                close_max = df_price['close'].max()
+                last_price = df_price['close'].values[-1]
+
+                if last_price/close_max < 0.9:
+                    if buy_num == 0 and ret < 0.2:  #没有新信号，不杀高，有盈利空间继续拿着
+                        continue
+                    
+                    write_file('bug_brain.csv',str('%s,sell,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入四大list执行
+                    write_file('bug_log.csv', str('%s,跟损信号,%s,周期:%s,盈利:%s\n' % (today_date,stockcode,duration,ret)),append = True)
+                    continue
+
+                df_value = get_valuation(stockcode, count = 10, end_date=today_date, fields=['turnover_ratio'])
+                turnover_mean = df_value['turnover_ratio'].mean()
+                turnover_last = df_value['turnover_ratio'].values[0]
+                if  turnover_last > 3 and (turnover_last > 2.5*turnover_mean):
+                    if ret < 0.05:  #抬高高换的触发门槛
+                        continue
+                        
+                    write_file('bug_brain.csv',str('%s,sell,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入四大list执行
+                    write_file('bug_log.csv', str('%s,高换信号,%s,周期:%s,盈利:%s\n' % (today_date,stockcode,duration,ret)),append = True)
+                    continue
+
+        if rise_ratio < 0.015:
+            if buy_num == 0:
+                continue
+            else:
+                if duration < 2 and ret > -0.04:
+                    continue
+                if duration < 3 and ret > -0.02:
+                    continue
+                if duration < 6 and ret > -0.01:
+                    continue
+                #g.selllist.append(stockcode)
+                write_file('bug_brain.csv',str('%s,sell,%s\n' % (today_date,stockcode)),append = True) #记录在任务清单中，方便明日盘前载入四大list执行
+                write_file('bug_log.csv', str('%s,后慢信号,%s,周期:%s,盈利:%s\n' % (today_date,stockcode,duration,ret)),append = True)
+    
+#技术面交叉信号
+def Technical_signal(stockcode,today_date):
+    oneday=datetime.timedelta(days=1) 
+    yeday_date = today_date - oneday
+    Trix_signal = 0
+    MACD_signal = 0
+    EMV_signal = 0
+    KD_signal = 0
+    
+    TRIX_t,MATRIX_t = TRIX(stockcode,check_date=today_date, N = 12, M = 9)
+    TRIX_y,MATRIX_y = TRIX(stockcode,check_date=yeday_date, N = 12, M = 9)
+    TrixDelta_t = MATRIX_t[stockcode] - TRIX_t[stockcode]
+    TrixDelta_y = MATRIX_y[stockcode] - TRIX_y[stockcode]
+    
+    if (TRIX_t[stockcode] <= MATRIX_t[stockcode]) and (TrixDelta_t < TrixDelta_y) and (TrixDelta_t <= -0.03):
+        Trix_signal = 1 #金叉将成
+    elif (TRIX_t[stockcode] >= MATRIX_t[stockcode]) and (TRIX_y[stockcode] <= MATRIX_y[stockcode]):
+        Trix_signal = 1 #金叉已成
+    elif (TRIX_t[stockcode] <= MATRIX_t[stockcode]) and (TRIX_y[stockcode] >= MATRIX_y[stockcode]):
+        Trix_signal = -1 ##死叉已成
+    
+    DIF_t,DEA_t,MACD_t = MACD(stockcode,check_date=today_date, SHORT = 12, LONG = 26, MID = 9)
+    DIF_y,DEA_y,MACD_y = MACD(stockcode,check_date=yeday_date, SHORT = 12, LONG = 26, MID = 9)
+    MacdDelta_t = DEA_t[stockcode] - DIF_t[stockcode]
+    MacdDelta_y = DEA_y[stockcode] - DIF_y[stockcode]
+    
+    if (DIF_t[stockcode] <= DEA_t[stockcode]) and (MacdDelta_t < MacdDelta_y) and (MacdDelta_t <= 0.05):
+        MACD_signal = 1 #金叉将成
+    elif (DIF_t[stockcode] >= DEA_t[stockcode]) and (DIF_y[stockcode] <= DEA_y[stockcode]):
+        MACD_signal = 1 #金叉已成
+    elif (DIF_t[stockcode] <= DEA_t[stockcode]) and (DIF_y[stockcode] >= DEA_y[stockcode]):
+        MACD_signal = -1 #死叉已成
+        
+    EMV_t,MAEMV_t = EMV(stockcode,check_date=today_date, N = 14, M = 9)
+    EMV_y,MAEMV_y = EMV(stockcode,check_date=yeday_date, N = 14, M = 9)
+    
+    #EMV和KD信号太频繁，只算已成
+    if (EMV_t[stockcode] >= MAEMV_t[stockcode]) and (EMV_y[stockcode] <= MAEMV_y[stockcode]):
+        EMV_signal = 1 #金叉已成
+    elif (EMV_t[stockcode] <= MAEMV_t[stockcode]) and (EMV_y[stockcode] >= MAEMV_y[stockcode]):
+        EMV_signal = -1 #死叉已成
+        
+    K_t, D_t = KD(stockcode, check_date = today_date, N = 9, M1 = 3, M2 = 3)
+    K_y, D_y = KD(stockcode, check_date = yeday_date, N = 9, M1 = 3, M2 = 3)
+    
+    if (K_t[stockcode] >= D_t[stockcode]) and (K_y[stockcode] <= D_y[stockcode]):
+        KD_signal = 1 #金叉已成
+    elif (K_t[stockcode] <= D_t[stockcode]) and (K_y[stockcode] >= D_y[stockcode]):
+        KD_signal = -1 #死叉已成
+        
+    return Trix_signal,MACD_signal,EMV_signal,KD_signal

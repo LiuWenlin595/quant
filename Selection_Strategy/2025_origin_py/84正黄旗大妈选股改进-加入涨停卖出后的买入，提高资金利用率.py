@@ -152,4 +152,80 @@ def get_dividend_ratio_filter_list(context, stock_list, sort, p1, p2):
     
 # 准备股票池
 def prepare_stock_list(context):
-    #获取
+    #获取已持有列表
+    g.high_limit_list = []
+    hold_list = list(context.portfolio.positions)
+    if hold_list:
+        df = get_price(hold_list, end_date=context.previous_date, frequency='daily',
+                       fields=['close', 'high_limit'],
+                       count=1, panel=False)
+        g.high_limit_list = df[df['close'] == df['high_limit']]['code'].tolist()
+
+#  调整昨日涨停股票
+def check_limit_up(context):
+    # 检查持仓，如果有卖出就再买入
+    position_count = len(context.portfolio.positions)
+    if g.stock_num > position_count and position_count != 0: # position_count != 0 用于避免第一次运行时代替go_trader 买入
+        my_Trader(context) # 计算 g.choice
+        cdata = get_current_data()
+        psize = context.portfolio.available_cash/(g.stock_num - position_count)
+        for s in g.choice:
+            if s not in context.portfolio.positions and s not in g.just_sold:
+                order_value(s, psize) 
+                if len(context.portfolio.positions) == g.stock_num:
+                    break
+    # 获取持仓的昨日涨停列表
+    current_data = get_current_data()
+    if g.high_limit_list:
+        for stock in g.high_limit_list:
+            if current_data[stock].last_price < current_data[stock].high_limit:
+                order_target(stock, 0)
+                g.just_sold.append(stock)
+            
+ 
+# 过滤科创北交股票
+def filter_kcbj_stock(stock_list):
+    for stock in stock_list[:]:
+        if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68':
+            stock_list.remove(stock)
+    return stock_list
+
+# 过滤停牌股票
+def filter_paused_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list if not current_data[stock].paused]
+
+
+# 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list
+			if not current_data[stock].is_st
+			and 'ST' not in current_data[stock].name
+			and '*' not in current_data[stock].name
+			and '退' not in current_data[stock].name]
+
+
+# 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < current_data[stock].high_limit]
+
+# 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] > current_data[stock].low_limit]
+
+#2-4 过滤股价高于9元的股票	
+def filter_highprice_stock(context,stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < 9]
+						
+# end

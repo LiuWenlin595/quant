@@ -444,4 +444,118 @@ def get_factor_filter_df(yesterday, stock_list, jqfactor, sort):
 # 计算股票处于一段时间内相对位置
 def get_day_relative_position_df(stock_list, date, watch_days):
     if len(stock_list) != 0:
-        df = get_price(stock_list, end_date=date, fields=['high
+        df = get_price(stock_list, end_date=date, fields=['high', 'low', 'close'], count=watch_days, fill_paused=False, skip_paused=False, panel=False).dropna()
+        close = df.groupby('code').apply(lambda df: df.iloc[-1,-1])
+        high = df.groupby('code').apply(lambda df: df['high'].max())
+        low = df.groupby('code').apply(lambda df: df['low'].min())
+        result = pd.DataFrame()
+        result['rp'] = (close-low) / (high-low)
+        return result
+    else:
+        return pd.DataFrame(columns=['rp'])
+    
+
+# 计算股票处于一段时间内相对位置
+def get_month_relative_position_df(stock_list, date, watch_months):
+    if len(stock_list) != 0:
+        df = get_price(stock_list, end_date=date, fields=['high', 'low', 'close'], frequency='30d', count=watch_months, fill_paused=False, skip_paused=False, panel=False).dropna()
+        close = df.groupby('code').apply(lambda df: df.iloc[-1,-1])
+        high = df.groupby('code').apply(lambda df: df['high'].max())
+        low = df.groupby('code').apply(lambda df: df['low'].min())
+        result = pd.DataFrame()
+        result['rp'] = (close-low) / (high-low)
+        return result
+    else:
+        return pd.DataFrame(columns=['rp'])
+
+
+# 计算股票处于一段时间内相对位置
+def get_week_relative_position_df(stock_list, date, watch_weeks):
+    if len(stock_list) != 0:
+        df = get_price(stock_list, end_date=date, fields=['high', 'low', 'close'], frequency='5d', count=watch_weeks, fill_paused=False, skip_paused=False, panel=False).dropna()
+        close = df.groupby('code').apply(lambda df: df.iloc[-1,-1])
+        high = df.groupby('code').apply(lambda df: df['high'].max())
+        low = df.groupby('code').apply(lambda df: df['low'].min())
+        result = pd.DataFrame()
+        result['rp'] = (close-low) / (high-low)
+        return result
+    else:
+        return pd.DataFrame(columns=['rp'])
+
+def filter_amp(initial_list, date, watch_days):
+    df = get_price(initial_list, end_date=date, frequency='daily', fields=['close','pre_close'], count=watch_days, panel=False, fill_paused=False, skip_paused=False)
+    df = df.dropna() #去除停牌
+    ex_df = df[abs((df['close']-df['pre_close'])/df['pre_close'])*100>2.5]
+    ex_lst = list(set(ex_df['code']))
+    lst = [s for s in initial_list if s not in ex_lst]
+    return lst
+
+
+def upward(stock_list, date, watch_days):
+    if len(stock_list) != 0:
+        df = get_price(stock_list, end_date=date, fields=['high', 'low', 'close'], count=watch_days, fill_paused=False, skip_paused=False, panel=False).dropna()
+        close = df.groupby('code').apply(lambda df: df.iloc[-1,-1])
+        high = df.groupby('code').apply(lambda df: df['close'].max())
+        low = df.groupby('code').apply(lambda df: df['close'].min())
+        result = pd.DataFrame()
+        result['loc'] = close - high
+        # result['loc'] = (high + low) / 2
+#         result['loc'] = high * 0.98
+        
+        return result[result['loc'] == 0]
+    else:
+        return pd.DataFrame(columns=['loc'])
+    
+def approaching_max(stock_list, date, watch_days):
+    if len(stock_list) != 0:
+        df = get_price(stock_list, end_date=date, fields=['high', 'low', 'close'], count=watch_days, fill_paused=False, skip_paused=False, panel=False).dropna()
+        close = df.groupby('code').apply(lambda df: df.iloc[-1,-1])
+        high = df.groupby('code').apply(lambda df: df['high'].max())
+        res = pd.DataFrame()
+        res['high'] = high
+        res['close'] = close
+        res = res[res['close'] > 0.92*res['high']]
+        return list(res.index)
+    else:
+        return []
+
+# 交易模块-平仓
+def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            del_hold_info(security)
+            return True
+    return False
+
+# 放量滞涨
+def big_volume_sell(stock, current_price, context):
+    pre_date = context.previous_date
+    date_time = context.current_dt
+    df1 = get_price(stock, count=15, end_date=pre_date, frequency='daily',
+           fields=['close','volume'])
+    avg_volume = df1['volume'][-15:-2].mean()
+    pre_close = df1['close'][-1]
+
+    df = get_price(stock, start_date=date_time.strftime("%Y-%m-%d 9:30:00"), end_date=date_time, frequency='10m',
+               fields=['volume'])
+    curr_volume = df['volume'][:].sum()
+
+    return (current_price - pre_close) / pre_close * 100 < 2 and curr_volume > avg_volume * 3
+
+
+## 持仓信息添加
+def add_hold_info(stock):
+    g.hold_days[stock] = 0
+
+
+## 持仓信息删除
+def del_hold_info(stock):
+    g.hold_days.pop(stock)
+
+## 更改持股天数
+def change_hold_info(context):
+    for stock in g.hold_days.keys():
+        g.hold_days[stock] += 1
+        log.info("%s 持股天数%s" % (stock, g.hold_days[stock]))

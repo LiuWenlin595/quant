@@ -150,4 +150,173 @@ def before_trading_start(context):
         df_price = get_price(stockcode,count=1,end_date=lastd_date, frequency='daily', fields=['open','close','high','low'])
         g.presell[stockcode] = df_price['high'].values[-1]
         
-    log.info(g.prebuy,g.
+    log.info(g.prebuy,g.presell)
+    
+#按bar运行        
+#def market_open_bar(context):
+def handle_data(context,data):
+    #log.info('函数运行时间(market_open_bar):'+str(context.current_dt.time()))
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    all_data = get_current_data()
+    
+    #判断票池和仓位，全为空则轮空
+    if len(g.poollist) ==0 and len(context.portfolio.positions) ==0:
+        log.info('空池空仓，今天休息')
+        return
+    
+    #判断仓位，若持仓则挂卖单
+    for stockcode in context.portfolio.positions:
+        if (context.portfolio.positions[stockcode].closeable_amount >0) and (all_data[stockcode].last_price >= g.presell[stockcode]):
+            if order_target_value(stockcode,0) != None:
+                log.info('%s,%s卖出成功，价格%s' % (today_date,stockcode,all_data[stockcode].last_price))
+    
+    #若仓位有余，挂买单
+    if context.portfolio.available_cash > 0.4*context.portfolio.total_value:
+        cash = 0.5*context.portfolio.total_value
+        for stockcode in g.poollist:
+            if all_data[stockcode].last_price <= g.prebuy[stockcode]:
+                if order_target_value(stockcode,cash) != None:
+                    log.info('%s,%s买入成功，价格%s' % (today_date,stockcode,all_data[stockcode].last_price))
+    
+    #14：55执行平仓
+    hour = context.current_dt.hour
+    minute = context.current_dt.minute
+    if hour == 14 and minute == 55:
+        for stockcode in context.portfolio.positions:
+            if (context.portfolio.positions[stockcode].closeable_amount >0):
+                if order_target_value(stockcode,0) != None:
+                    log.info('%s,%s平仓成功，价格%s' % (today_date,stockcode,all_data[stockcode].last_price))
+                    
+## 开盘时运行函数
+def market_open(context):
+    log.info('函数运行时间(market_open):'+str(context.current_dt.time()))
+    all_data = get_current_data()
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    
+    for stockcode in context.portfolio.positions:
+        df_price = get_price(stockcode,count=1,end_date=lastd_date, frequency='daily', fields=['open','close','high','low'])
+        price_lasthigh = df_price['high'].values[-1]
+        price_lastlow = df_price['low'].values[-1]
+        if order_target_value(stockcode,0, LimitOrderStyle(price_lasthigh)) != None:
+            log.info('%s,%s卖出成功，价格%s' % (today_date,stockcode,price_lasthigh))
+            write_file('fiori_log.csv',str('%s,%s卖出成功，价格%s\n' % (today_date,stockcode,price_lasthigh)),append = True) 
+            
+    if context.portfolio.available_cash > 0.8*context.portfolio.total_value:
+        cash_perstk = context.portfolio.available_cash/g.stocknum
+        for stockcode in g.poollist:
+            df_price = get_price(stockcode,count=1,end_date=lastd_date, frequency='daily', fields=['open','close','high','low'])
+            price_lasthigh = df_price['high'].values[-1]
+            price_lastlow = df_price['low'].values[-1]
+            if order_target_value(stockcode,cash_perstk, LimitOrderStyle(price_lastlow)) != None:
+                log.info('%s,%s买入成功，价格%s' % (today_date,stockcode,price_lastlow))
+                write_file('fiori_log.csv',str('%s,%s买入成功，价格%s\n' % (today_date,stockcode,price_lastlow)),append = True) 
+
+## 收盘时运行函数
+def market_close(context):
+    log.info('函数运行时间(market_close):'+str(context.current_dt.time()))
+    today_date = context.current_dt.date()
+    all_data = get_current_data()
+    for stockcode in context.portfolio.positions:
+        if order_target_value(stockcode,0) != None:
+            log.info('%s,%s尾盘平仓，价格%s' % (today_date,stockcode,all_data[stockcode].last_price))
+            write_file('fiori_log.csv',str('%s,%s尾盘平仓，价格%s\n' % (today_date,stockcode,all_data[stockcode].last_price)),append = True) 
+            
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    next_date = get_trade_days(start_date=today_date)[1]
+    all_data = get_current_data()
+    #此处检查当日信号的上车和收盘状况，按序写入，日期和代码，low_flag,high_flag,profit_flag
+    for stockcode in g.poollist:
+        stockname = all_data[stockcode].name
+        df_value = get_valuation(stockcode, end_date=lastd_date, count=1, fields=['circulating_market_cap'])
+        cir_m = df_value['circulating_market_cap'].values
+        MTR1,ATR1 = ATR(stockcode, check_date=lastd_date, timeperiod=5)
+        df_price = get_price(stockcode,count=3,end_date=next_date, frequency='daily', fields=['open','close','high','low'])    #先老后新
+        ATR5vPrice = ATR1[stockcode]/df_price['close'].values[0]
+        close_flag = df_price['close'].values[-1] /df_price['close'].values[0]  #T+2内,>1为涨，<1为跌
+        low_flag = df_price['low'].values[1] /df_price['low'].values[0]    #>1无法上车，<1可以上车
+        high_flag = df_price['high'].values[-1] /df_price['high'].values[-2] #>1可出货,<1或不可出
+        profit_flag = df_price['close'].values[-1]/df_price['low'].values[0] #>1可盈利,<1亏损
+        
+        write_file('fiori_log.csv',str('%s,%s,%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n' % (today_date,stockcode,stockname
+        ,cir_m,ATR5vPrice,close_flag,low_flag,high_flag,profit_flag)),append = True) 
+    
+"""
+-----------------------------自定义函数-------------------------------
+"""
+    
+## 测试限价单，按天运行的限价单，有则成交，时间为函数运行时间
+def test_limitorder(context):
+    log.info('函数运行时间(market_open):'+str(context.current_dt.time()))
+    all_data = get_current_data()
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    
+    df_price = get_price(g.security,count=1,end_date=lastd_date, frequency='daily', fields=['open','close','high','low'])
+    price_lasthigh = df_price['high'].values[-1]
+    price_lastlow = df_price['low'].values[-1]
+    
+    #只要有现金，挂昨低的一手多单
+    if context.portfolio.available_cash == context.portfolio.total_value:
+        if order_target_value('000001.XSHE',context.portfolio.available_cash, LimitOrderStyle(price_lastlow)) != None:
+            log.info('%s买入全部，价格%s' % (today_date,price_lastlow))
+    elif context.portfolio.available_cash > 0.1*context.portfolio.total_value:
+        if order('000001.XSHE', 100, LimitOrderStyle(price_lastlow)) != None:
+            log.info('%s买入一手，价格%s' % (today_date,price_lastlow))
+            
+        
+    #若可卖，挂昨高的一手空单
+    if context.portfolio.positions[g.security].closeable_amount >0:
+        if order('000001.XSHE', -100, LimitOrderStyle(price_lasthigh)) != None:
+            log.info('%s卖出一手，价格%s' % (today_date,price_lasthigh))
+
+#趋势过滤，根据方向和周期;0-<0;0.5-0.5~2
+def trend_filter(context,stocklist,trend_duration,trend_dir):
+    today_date = context.current_dt.date()
+    lastd_date = context.previous_date
+    poollist =[]
+    
+    #取周期20/60的close
+    df_price = history(trend_duration,'1d',field='close',security_list=stocklist,df=True,skip_paused=True,fq='pre')
+    df_price = df_price.T
+    df_price.fillna(method='ffill',inplace=True)
+    #获取回归系数，并递减排序
+    df_price['coef'] = [fit_linear_nor(df_price.iloc[i][:]) for i in range(len(df_price))]
+    
+    if trend_dir == -2:
+        df_price=df_price[(df_price.coef <-2)]   
+        df_price.sort_values('coef',ascending=True,inplace=True)
+    elif trend_dir == -0.5:
+        df_price=df_price[(df_price.coef <-0.5)&(df_price.coef >-2)]   
+        df_price.sort_values('coef',ascending=True,inplace=True)
+    elif trend_dir == -0.01:
+        df_price=df_price[df_price.coef <0]
+        df_price.sort_values('coef',ascending=True,inplace=True)
+    elif trend_dir == 0.01:
+        df_price=df_price[df_price.coef >0]
+        df_price.sort_values('coef',ascending=False,inplace=True)
+    elif trend_dir == 0.5:
+        df_price=df_price[(df_price.coef >0.5)&(df_price.coef <2)]   
+        df_price.sort_values('coef',ascending=False,inplace=True)
+    elif trend_dir == 2:
+        df_price=df_price[(df_price.coef >2)]   
+        df_price.sort_values('coef',ascending=False,inplace=True)
+        
+    #log.info(df_price)
+    poollist = df_price.index.tolist()
+    return poollist
+    
+# 直线拟合--列表斜率，from矢南的趋势交易
+def fit_linear_nor(lis):
+    model = LinearRegression()
+    x_train = np.arange(0, len(lis)).reshape(-1, 1)
+    y_train = np.array(lis).reshape(-1, 1)
+    model.fit(x_train, y_train)
+    m = model.coef_
+    m1 = round(float(m), 3)
+    return m1

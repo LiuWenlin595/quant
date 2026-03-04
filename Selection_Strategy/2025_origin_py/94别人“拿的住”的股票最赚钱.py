@@ -20,7 +20,7 @@ def initialize(context):
     #run_weekly(market_open, 1, time='open')
     run_monthly(market_open, 20, time='open')
 
-# 运行函数
+## 运行函数
 def market_open(context):
     # 加上大盘情绪衡量
     dp = attribute_history('000300.XSHG', 250, unit='1d',fields=['open', 'close', 'volume'],skip_paused=True, df=True, fq='pre')
@@ -76,4 +76,10 @@ def rebalance_position(context, stock_list):
     total_value = context.portfolio.total_value
 
     if len(stock_list) >0 :
-        #
+        # 买入
+        bulk_orders(stock_list, total_value/len(stock_list))
+
+# 批量买卖股票
+def bulk_orders(stock_list,target_value):
+    for i in stock_list:
+        order_target_value(i, target_value)

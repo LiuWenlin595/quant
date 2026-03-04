@@ -145,4 +145,249 @@ def prepare_stock_list2(context):
     # 过滤次新股
     stock_list = filter_new_stock2(stock_list, last_date)
     # 过滤ST股
-    stock_list = filter_st_stock2(stock_list
+    stock_list = filter_st_stock2(stock_list, last_date)
+    # 今日低开
+    stock_list = filter_stocks_by_opening_range2(date, stock_list)
+    # 计算N日无涨停
+    stock_list = get_no_limit_up_stocks2(last_last_date, 1, stock_list)
+    # 计算相对位置
+    stock_list = get_relative_position_stocks2(last_date, 30, stock_list)
+
+    return stock_list
+
+
+# 筛选出某一日涨停的股票
+def get_limit_up_stock(initial_list, date):
+    df = get_price(initial_list, end_date=date, frequency='daily', fields=['close', 'high', 'high_limit'], count=1,
+                   panel=False, fill_paused=False, skip_paused=False).dropna()
+    df = df[df['close'] == df['high_limit']]
+    hl_list = list(df.code)
+    return hl_list
+
+
+# 过滤新股
+def filter_new_stock(initial_list, date, days=60):
+    return [stock for stock in initial_list if date - get_security_info(stock).start_date > dt.timedelta(days=days)]
+
+
+# 过滤非ST
+def filter_st_stock(stock_list, date):
+    filtered_stocks = []
+
+    for stock in stock_list:
+        try:
+            price_data = get_price(stock, end_date=date, count=2, frequency='daily', fields=['open', 'close'])
+
+            if len(price_data) == 2:
+                close_today = price_data['close'][-1]
+                close_yesterday = price_data['close'][-2]
+                return_percent_yesterday = (close_today - close_yesterday) / close_yesterday * 100
+
+                open_today = price_data['open'][-1]
+                return_percent_today = (close_today - open_today) / open_today * 100
+
+                if 4 < return_percent_yesterday < 6 and close_today > 2.5:
+                    filtered_stocks.append(stock) 
+
+        except Exception as e:
+            print(f"根据涨幅过滤ST出错 {stock}: {e}")
+
+    # filtered_stocks.sort()
+    return filtered_stocks
+
+
+# 计算低开
+def filter_stocks_by_opening_range(date, code_list):
+    filtered_codes = []
+
+    for code in code_list:
+        stock_data = get_price(code, start_date=date, end_date=date, frequency='daily', fields=['open', 'pre_close'])
+
+        if stock_data.empty:
+            continue
+
+        open_price = stock_data['open'].iloc[0]
+        pre_close_price = stock_data['pre_close'].iloc[0]
+
+        open_change_ratio = (open_price - pre_close_price) / pre_close_price * 100
+
+        if (code.startswith('301') or code.startswith('300') or code.startswith('688') or code.startswith('689')):
+            if 0 <= open_change_ratio <= 1:
+                filtered_codes.append(code)
+        else:
+            if 0 <= open_change_ratio <= 1:
+                filtered_codes.append(code)
+
+    return filtered_codes
+
+
+# 筛选近N日无涨停
+def get_no_limit_up_stocks(date, no_limit_date, code_list):
+    start_date = (pd.to_datetime(date) - pd.Timedelta(days=no_limit_date - 1)).strftime('%Y-%m-%d')
+    end_date = date
+
+    trading_days = get_trade_days(start_date=start_date, end_date=end_date)
+
+    no_limit_up_stocks = code_list.copy()
+
+    for day in trading_days:
+        if not no_limit_up_stocks:
+            break
+
+        stock_data = get_price(no_limit_up_stocks, end_date=day, frequency='daily',
+                               fields=['close', 'high', 'high_limit'], count=1, panel=False, fill_paused=False,
+                               skip_paused=False)
+        stock_data = stock_data.dropna()
+
+        limit_up_stocks = stock_data[stock_data['close'] == stock_data['high_limit']]['code'].tolist()
+
+        no_limit_up_stocks = [code for code in no_limit_up_stocks if code not in limit_up_stocks]
+
+    return no_limit_up_stocks
+
+
+# 计算相对位置
+def get_relative_position_stocks(date, watch_days, code_list):
+    filtered_codes = []
+
+    for code in code_list:
+        data = get_price(code, end_date=date, count=watch_days, fields=['high', 'low'])
+        max_high = data['high'].max()
+        min_low = data['low'].min()
+
+        close_price = get_price(code, end_date=date, count=1, fields=['close'])['close'].iloc[0]
+
+        relative_position = (close_price - min_low) / (max_high - min_low)
+
+        if 0.0 <= relative_position <= 0.3:
+            filtered_codes.append(code)
+
+    return filtered_codes
+
+# 筛选出某一日涨停的股票
+def get_limit_up_stock2(initial_list, date):
+    df = get_price(initial_list, end_date=date, frequency='daily', fields=['close', 'high', 'high_limit'], count=1,
+                   panel=False, fill_paused=False, skip_paused=False).dropna()
+    df = df[df['close'] == df['high_limit']]
+    hl_list = list(df.code)
+    return hl_list
+
+
+# 过滤新股
+def filter_new_stock2(initial_list, date, days=60):
+    return [stock for stock in initial_list if date - get_security_info(stock).start_date > dt.timedelta(days=days)]
+
+
+# 过滤非ST
+def filter_st_stock2(stock_list, date):
+    filtered_stocks = []
+
+    for stock in stock_list:
+        try:
+            price_data = get_price(stock, end_date=date, count=2, frequency='daily', fields=['open', 'close'])
+
+            if len(price_data) == 2:
+                close_today = price_data['close'][-1]
+                close_yesterday = price_data['close'][-2]
+                return_percent_yesterday = (close_today - close_yesterday) / close_yesterday * 100
+
+                open_today = price_data['open'][-1]
+                return_percent_today = (close_today - open_today) / open_today * 100
+
+                if 9 < return_percent_yesterday < 22 and return_percent_today > 5:
+                    filtered_stocks.append(stock)
+
+        except Exception as e:
+            print(f"根据涨幅过滤ST出错 {stock}: {e}")
+
+    # filtered_stocks.sort()
+    return filtered_stocks
+
+
+# 计算低开
+def filter_stocks_by_opening_range2(date, code_list):
+    filtered_codes = []
+
+    for code in code_list:
+        stock_data = get_price(code, start_date=date, end_date=date, frequency='daily', fields=['open', 'pre_close'])
+
+        if stock_data.empty:
+            continue
+
+        open_price = stock_data['open'].iloc[0]
+        pre_close_price = stock_data['pre_close'].iloc[0]
+
+        open_change_ratio = (open_price - pre_close_price) / pre_close_price * 100
+
+        if -4 <= open_change_ratio <= -3:
+            filtered_codes.append(code)
+
+    return filtered_codes
+
+
+# 筛选近N日无涨停
+def get_no_limit_up_stocks2(date, no_limit_date, code_list):
+    start_date = (pd.to_datetime(date) - pd.Timedelta(days=no_limit_date - 1)).strftime('%Y-%m-%d')
+    end_date = date
+
+    trading_days = get_trade_days(start_date=start_date, end_date=end_date)
+
+    no_limit_up_stocks = code_list.copy()
+
+    for day in trading_days:
+        if not no_limit_up_stocks:
+            break
+
+        stock_data = get_price(no_limit_up_stocks, end_date=day, frequency='daily',
+                               fields=['close', 'high', 'high_limit'], count=1, panel=False, fill_paused=False,
+                               skip_paused=False)
+        stock_data = stock_data.dropna()
+
+        limit_up_stocks = stock_data[stock_data['close'] == stock_data['high_limit']]['code'].tolist()
+
+        no_limit_up_stocks = [code for code in no_limit_up_stocks if code not in limit_up_stocks]
+
+    return no_limit_up_stocks
+
+
+# 计算相对位置
+def get_relative_position_stocks2(date, watch_days, code_list):
+    filtered_codes = []
+
+    for code in code_list:
+        data = get_price(code, end_date=date, count=watch_days, fields=['high', 'low'])
+        max_high = data['high'].max()
+        min_low = data['low'].min()
+
+        close_price = get_price(code, end_date=date, count=1, fields=['close'])['close'].iloc[0]
+
+        relative_position = (close_price - min_low) / (max_high - min_low)
+
+        if 0.0 <= relative_position <= 0.5:
+            filtered_codes.append(code)
+
+    return filtered_codes
+
+
+
+
+def get_previous_trade_day(context, n):
+    current_date = context.current_dt.date()
+
+    trade_days = get_trade_days(end_date=current_date, count=100)
+
+    if n > len(trade_days):
+        return None
+
+    previous_trade_day = trade_days[-(n + 1)]
+
+    return previous_trade_day
+
+
+# 过滤停牌
+def filter_paused_stock(initial_list, date):
+    df = get_price(initial_list, end_date=date, frequency='daily', fields=['paused'], count=1, panel=False,
+                   fill_paused=True)
+    df = df[df['paused'] == 0]
+    paused_list = list(df.code)
+    return paused_list

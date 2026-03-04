@@ -323,4 +323,158 @@ def singal(context):
     #
     B_ratio = get_price(Blst, end_date=dt_last, frequency='1d', fields=['close'], count=N, panel=False
                         ).pivot(index='time', columns='code', values='close')
-    change_BIG = (B_ratio
+    change_BIG = (B_ratio.iloc[-1] / B_ratio.iloc[0] - 1) * 100
+    A1 = np.array(change_BIG)
+    A1 = np.nan_to_num(A1)  
+    B_mean = np.mean(A1)
+    
+    S_ratio = get_price(Slst, end_date=dt_last, frequency='1d', fields=['close'], count=N, panel=False
+                        ).pivot(index='time', columns='code', values='close')
+    change_SMALL = (S_ratio.iloc[-1] / S_ratio.iloc[0] - 1) * 100
+    A1 = np.array(change_SMALL)
+    A1 = np.nan_to_num(A1)
+    S_mean = np.mean(A1)
+    if B_mean>S_mean and B_mean>0:
+        if B_mean>5:
+           g.singal='small'
+           print('大市值到头了，开小') 
+        else:
+            g.singal='big'
+            print('开大')
+    elif B_mean < S_mean and S_mean > 0:
+        g.singal='small'
+        print('开小')
+    else:
+        print('开外盘')
+        g.singal='etf'
+        
+# 1-3 整体调整持仓
+def monthly_adjustment(context):
+    today = context.current_dt
+    dt_last = context.previous_date
+    target_list=[]
+    print(g.singal)
+    if g.singal=='big':
+        B_stocks = get_index_stocks('000300.XSHG', dt_last)
+        B_stocks = filter_kcbj_stock(B_stocks)
+        B_stocks = filter_st_stock(B_stocks)
+        B_stocks = boll_filter(B_stocks,dt_last)
+        B_stocks = filter_new_stock(context, B_stocks)
+        choice = B_stocks
+        target_list1 = ROIC_BIG(context,choice)
+        target_list2 = BIG(context,choice)
+        target_list3 = BM(context,choice)
+        target_list = target_list3+target_list1+target_list2
+        target_list = list(set(target_list))
+        
+    elif g.singal=='small':
+        S_stocks = get_index_stocks('399101.XSHE', dt_last)
+        S_stocks = filter_kcbj_stock(S_stocks)
+        S_stocks = filter_st_stock(S_stocks)
+        S_stocks = filter_new_stock(context, S_stocks)       
+        choice = S_stocks
+        target_list = SMALL(context,choice)
+
+        
+    elif g.singal=='etf':
+        target_list = g.foreign_ETF
+    else:
+        print("g.signal 的值不是预期中的一个")    
+    
+    print(target_list)
+    target_list = filter_limitup_stock(context,target_list)
+    target_list = filter_limitdown_stock(context,target_list)
+    target_list = filter_paused_stock(target_list)
+    for stock in g.hold_list:
+        if (stock not in target_list) and (stock not in g.yesterday_HL_list):
+            position = context.portfolio.positions[stock]
+            close_position(position)
+    position_count = len(context.portfolio.positions)
+    target_num = len(target_list)
+    if target_num > position_count:
+        value = context.portfolio.cash / (target_num - position_count)
+        for stock in target_list:
+            if stock not in list(context.portfolio.positions.keys()):
+                if open_position(stock, value):
+                    if len(context.portfolio.positions) == target_num:
+                        break
+            
+def boll_filter(stocks,date):
+    x=get_bars(stocks, 1, unit='1d', fields=['high','low','close'],end_dt=date,df=True)
+    x.index=stocks
+    upperband, middleband, lowerband=Bollinger_Bands(stocks, date, timeperiod=20, 
+                        nbdevup=2, nbdevdn=2, unit = '1d', include_now = True, fq_ref_date = None)
+    x['up']= pd.DataFrame(upperband, index=[0]).T.values
+    x['mid']=pd.DataFrame(middleband, index=[0]).T.values
+    x['lowe']=pd.DataFrame(lowerband, index=[0]).T.values
+    x=x[(x['close']<x['up'])&(x['lowe']<x['low'])]
+    return(list(x.index))
+
+# 3-1 交易模块-自定义下单
+def order_target_value_(security, value):
+    if value == 0:
+        log.debug("Selling out %s" % (security))
+    else:
+        log.debug("Order %s to value %f" % (security, value))
+    return order_target_value(security, value)
+
+# 3-2 交易模块-开仓
+def open_position(security, value):
+    order = order_target_value_(security, value)
+    if order != None and order.filled > 0:
+        return True
+    return False
+
+# 3-3 交易模块-平仓
+def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)  # 可能会因停牌失败
+    if order != None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+
+
+def filter_paused_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list if not current_data[stock].paused]
+
+# 2-2 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+    current_data = get_current_data()
+    return [stock for stock in stock_list
+            if not current_data[stock].is_st
+            and 'ST' not in current_data[stock].name
+            and '*' not in current_data[stock].name
+            and '退' not in current_data[stock].name]
+
+
+# 2-3 过滤科创北交股票
+def filter_kcbj_stock(stock_list):
+    for stock in stock_list[:]:
+        if stock[0] == '4' or stock[0] == '8' or stock[:2] == '68' or stock[0] == '3':
+            stock_list.remove(stock)
+    return stock_list
+
+
+# 2-4 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    current_data = get_current_data()
+    return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+            or last_prices[stock][-1] < current_data[stock].high_limit]
+
+
+# 2-5 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    current_data = get_current_data()
+    return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+            or last_prices[stock][-1] > current_data[stock].low_limit]
+
+
+# 2-6 过滤次新股
+def filter_new_stock(context, stock_list):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if
+            not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=375)]

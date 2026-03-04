@@ -238,4 +238,194 @@ def min_consistency_check(context,signal):
     g.mini_cosi_list.append(cosistency_last)
     
     #0,增加基准指数的牛(关)熊(开)判断，1-年线上下
-    df_index = get_price('000001.XSHG', end_date=lastd_date, frequency='1d', fields='close',count=240, panel=False
+    df_index = get_price('000001.XSHG', end_date=lastd_date, frequency='1d', fields='close',count=240, panel=False)
+    if df_index['close'].values[-1] >df_index['close'].values.mean():
+        log.info('牛市,关闭一致性检查')
+        return False
+    else:
+        log.info('熊市,打开一致性检查')
+        
+    if len(g.mini_cosi_list) >=120:
+        cosistency_mean = np.mean(g.mini_cosi_list[-120:])
+        cosistency_std = np.std(g.mini_cosi_list[-120:])
+    else:
+        cosistency_mean = 0.8
+        cosistency_std =0.05
+    
+    cosistency_upper = cosistency_mean+cosistency_std
+    log.info('%s的mini变动中值:%.4f,标准差:%.4f,昨一致性:%.4f,一致性均值:%.4f,一致性上轨:%.4f' % (lastd_date,chg_med,chg_std,cosistency_last,cosistency_mean,cosistency_upper))
+    
+    
+    #使用BOLL带判断
+    if (chg_med <-2 and cosistency_last>=cosistency_upper):# or (chg_med <-4 and num4/num3>0.84) or (chg_med <-6 and num4/num3>0.82) :
+        log.info('清仓')
+        return True
+    elif (chg_med >2 and cosistency_last>=cosistency_mean):
+        log.info('满上')
+        return False
+    else:
+        log.info('照常')
+        return signal
+    """
+    #使用绝对值判断
+    if (chg_med <-2.2 and chg_med >-7 and num4/num3>=0.85):
+        log.info('清仓')
+        return True
+    elif (chg_med >2.1 and num4/num3>=0.82) or (chg_med >4 and num4/num3>=0.75):
+        log.info('满上')
+        return False
+    else:
+        log.info('照常')
+        return signal
+    """
+    return False
+#3-8 判断今天是否为账户资金再平衡的日期
+#date_flag,1-单个月，2-两个月1和4，3-三个月1和4和6
+def today_is_between(context, date_flag, start_date, end_date):
+    today = context.current_dt.strftime('%m-%d')
+    #1(01-01~01-31)-4(04-01~04-30)-6(06-01~06-30)
+    if date_flag ==1:
+        if (start_date <= today) and (today <= end_date):
+            return True
+        else:
+            return False
+    elif date_flag ==2:
+        if ('01-01' <= today) and (today <= '01-31'):
+            return True
+        elif ('04-01' <= today) and (today <= '04-30'):
+            return True
+        else:
+            return False
+    elif date_flag ==2:
+        if ('01-01' <= today) and (today <= '01-31'):
+            return True
+        elif ('04-01' <= today) and (today <= '04-30'):
+            return True
+        elif ('06-01' <= today) and (today <= '06-30'):
+            return True
+        else:
+            return False
+
+#4-2 清仓后次日资金可转
+def close_account(context):
+    if len(context.portfolio.positions) ==0:
+        return
+
+    for stock in context.portfolio.positions:
+        position = context.portfolio.positions[stock]
+        close_position(position)
+        log.info("关仓，卖出[%s]" % (stock))
+
+#2-1 过滤停牌股票
+def filter_paused_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list if not current_data[stock].paused]
+
+#2-2 过滤ST及其他具有退市标签的股票
+def filter_st_stock(stock_list):
+	current_data = get_current_data()
+	return [stock for stock in stock_list
+			if not current_data[stock].is_st
+			and 'ST' not in current_data[stock].name
+    		and '*' not in current_data[stock].name
+			and '退' not in current_data[stock].name]
+
+#2-3 获取最近N个交易日内有涨停的股票
+def get_recent_limit_up_stock(context, stock_list, recent_days):
+    stat_date = context.previous_date
+    new_list = []
+    for stock in stock_list:
+        df = get_price(stock, end_date=stat_date, frequency='daily', fields=['close','high_limit'], count=recent_days, panel=False, fill_paused=False)
+        df = df[df['close'] == df['high_limit']]
+        if len(df) > 0:
+            new_list.append(stock)
+    return new_list
+
+#2-4 过滤涨停的股票
+def filter_limitup_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] < current_data[stock].high_limit]
+
+#2-5 过滤跌停的股票
+def filter_limitdown_stock(context, stock_list):
+	last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+	current_data = get_current_data()
+	return [stock for stock in stock_list if stock in context.portfolio.positions.keys()
+			or last_prices[stock][-1] > current_data[stock].low_limit]
+
+#2-6 过滤科创板
+def filter_kcb_stock(context, stock_list):
+    return [stock for stock in stock_list  if stock[0:3] != '688']
+
+#2-7 过滤次新股
+def filter_new_stock(context,stock_list,d):
+    yesterday = context.previous_date
+    return [stock for stock in stock_list if not yesterday - get_security_info(stock).start_date < datetime.timedelta(days=d)]
+
+#3-1 交易模块-自定义下单
+def order_target_value_(security, value):
+	if value == 0:
+		log.debug("Selling out %s" % (security))
+	else:
+		log.debug("Order %s to value %f" % (security, value))
+	return order_target_value(security, value)
+
+#3-2 交易模块-开仓
+def open_position(security, value):
+	order = order_target_value_(security, value)
+	if order != None and order.filled > 0:
+		return True
+	return False
+
+#3-3 交易模块-平仓
+def close_position(position):
+	security = position.security
+	order = order_target_value_(security, 0)  # 可能会因停牌失败
+	if order != None:
+		if order.status == OrderStatus.held and order.filled == order.amount:
+			return True
+	return False
+
+#3-4 交易模块-调仓
+def adjust_position(context, buy_stocks, stock_num):
+	for stock in context.portfolio.positions:
+		if stock not in buy_stocks:
+			log.info("[%s]不在应买入列表中" % (stock))
+			position = context.portfolio.positions[stock]
+			close_position(position)
+		else:
+			log.info("[%s]已经持有无需重复买入" % (stock))
+
+	position_count = len(context.portfolio.positions)
+	if stock_num > position_count:
+		value = context.portfolio.cash / (stock_num - position_count)
+		for stock in buy_stocks:
+			if context.portfolio.positions[stock].total_amount == 0:
+				if open_position(stock, value):
+					if len(context.portfolio.positions) == stock_num:
+						break
+
+#4-1 打印每日持仓信息
+def print_position_info(context):
+    #打印当天成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        print('成交记录：'+str(_trade))
+    #打印账户信息
+    for position in list(context.portfolio.positions.values()):
+        securities=position.security
+        cost=position.avg_cost
+        price=position.price
+        ret=100*(price/cost-1)
+        value=position.value
+        amount=position.total_amount    
+        print('代码:{}'.format(securities))
+        print('成本价:{}'.format(format(cost,'.2f')))
+        print('现价:{}'.format(price))
+        print('收益率:{}%'.format(format(ret,'.2f')))
+        print('持仓(股):{}'.format(amount))
+        print('市值:{}'.format(format(value,'.2f')))
+        print('———————————————————————————————————')
+    print('———————————————————————————————————————分割线————————————————————————————————————————')

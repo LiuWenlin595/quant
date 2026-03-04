@@ -2,20 +2,21 @@
 # 标题：韶华研究之二十，竞价异动
 # 作者：韶华不负
 
-# 策略介绍-竞价异动
-# 昨日涨停票，跟踪9:24和9:25两个时间的tick，对比找出多空两头
-# 应和蒋的战绩分析
-# 3.28差，智莱科技，20D已涨回调，昨日非板，今日竞价量3倍上0.7KW，价微升0.004，开0.058
-# 3.29，建新股份，20D上涨1.5，昨日20CM好板，今日竞价量1.8倍上2.5KW，价微降0.004，开0.066
-# 4.1，海泰科，20D上涨1.5，昨日20CMT字板，今日竞价量3倍上1.6KW，价微升0.001，开0.08
-# 4.3差，七彩化学，昨日20CM好板，今日竞价量2倍上3KW，价降0.025，开0.0587
-# 4.8，宜通世纪，20D慢涨无板，昨日非板，今日竞价量6倍上0.5KW，价微升0.005，开0.053
-# 4.9差，豪恩气电，20D上涨1.2，昨日20CM好板，今日竞价量3倍上3KW，价微升0.013，开0.057
-# 4.10，德福科技，20D上涨1.5，昨日20CM好板，今日竞价量3倍上3KW，价降0.015，开0.063
-# 4.12差，曼卡龙，20D上涨1.2无板，昨日非板，今日竞价量4倍上2KW，价微降0.002，开0.079
-# 4.15，中信海直，20D上涨1.5，昨日非板，今日竞价量2倍上3KW，价升0.02，开0.013
-# 4.24，蓝海华腾，20D振荡，昨日20CM好板，今日竞价量3倍上3KW，价微降0.004，开0.0063
-
+"""
+策略介绍-竞价异动
+昨日涨停票，跟踪9:24和9:25两个时间的tick，对比找出多空两头
+应和蒋的战绩分析
+3.28差，智莱科技，20D已涨回调，昨日非板，今日竞价量3倍上0.7KW，价微升0.004，开0.058
+3.29，建新股份，20D上涨1.5，昨日20CM好板，今日竞价量1.8倍上2.5KW，价微降0.004，开0.066
+4.1，海泰科，20D上涨1.5，昨日20CMT字板，今日竞价量3倍上1.6KW，价微升0.001，开0.08
+4.3差，七彩化学，昨日20CM好板，今日竞价量2倍上3KW，价降0.025，开0.0587
+4.8，宜通世纪，20D慢涨无板，昨日非板，今日竞价量6倍上0.5KW，价微升0.005，开0.053
+4.9差，豪恩气电，20D上涨1.2，昨日20CM好板，今日竞价量3倍上3KW，价微升0.013，开0.057
+4.10，德福科技，20D上涨1.5，昨日20CM好板，今日竞价量3倍上3KW，价降0.015，开0.063
+4.12差，曼卡龙，20D上涨1.2无板，昨日非板，今日竞价量4倍上2KW，价微降0.002，开0.079
+4.15，中信海直，20D上涨1.5，昨日非板，今日竞价量2倍上3KW，价升0.02，开0.013
+4.24，蓝海华腾，20D振荡，昨日20CM好板，今日竞价量3倍上3KW，价微降0.004，开0.0063
+"""
 # 导入函数库
 from jqdata import *
 from jqlib.technical_analysis  import *
@@ -203,4 +204,107 @@ def market_open(context):
 def market_run(context):
     log.info('函数运行时间(market_run):'+str(context.current_dt.time()))
     today_date = context.current_dt.date()
-    last
+    lastd_date = context.previous_date
+    current_data = get_current_data()
+    
+    for stockcode in context.portfolio.positions:
+        if current_data[stockcode].paused == True:
+            continue
+        if context.portfolio.positions[stockcode].closeable_amount ==0:
+            continue
+
+        #非停出
+        if current_data[stockcode].last_price != current_data[stockcode].high_limit:
+            log.info('非涨停即出%s' % stockcode)
+            sell_stock(context,stockcode,0)
+            continue
+        
+
+## 收盘时运行函数
+def market_close(context):
+    log.info('函数运行时间(market_close):'+str(context.current_dt.time()))
+
+        
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+
+
+"""
+---------------------------------函数定义-主要策略-----------------------------------------------
+"""
+#蒋的方法，N天M涨停过滤
+def get_up_filter_jiang(context,stocklist,check_date,check_duration,up_num,direction):
+    # 输出运行时间
+    log.info('-函数运行时间(get_up_filter_jiang)：'+str(context.current_dt.time()))
+    #0，预置，今天是D日
+    all_data = get_current_data()
+    poollist=[]
+    
+    if len(stocklist)==0:
+        log.info("输入为空")
+        return poollist
+    
+    # 交易日历
+    trd_days = get_trade_days(end_date=check_date, count=check_duration)  # array[datetime.date]
+    s_trd_days = pd.Series(range(len(trd_days)), index=trd_days)  # Series[index:交易日期，value:第几个交易日]
+    back_date = trd_days[0]
+    
+    #2，形态过滤，一月内两次以上涨停(盘中过10%也算)
+    start_time = time.time()
+    # 取数
+    df_price = get_price(stocklist,end_date=check_date,frequency='1d',fields=['pre_close','open','close','high','high_limit','low_limit','paused']
+    ,skip_paused=False,fq='pre',count=check_duration,panel=False,fill_paused=True)
+    
+    # 过滤出涨停的股票，按time索引
+    df_up = df_price[(df_price.close == df_price.high_limit) & (df_price.paused == 0)].set_index('time')
+    # 标注出df_up中的time对应的是第几个交易日(ith)
+    df_up['ith'] = s_trd_days
+    
+    code_set = set(df_up.code.values)
+    if direction ==1:
+        poollist =[stockcode for stockcode in code_set if ((len(df_up[df_up.code ==stockcode]) > up_num))]
+    elif direction ==-1:
+        poollist =[stockcode for stockcode in code_set if ((len(df_up[df_up.code ==stockcode]) < up_num))]
+    else:
+        poollist =[stockcode for stockcode in code_set if ((len(df_up[df_up.code ==stockcode]) == up_num))]
+    
+    end_time = time.time()
+    #log.info('---%d天(%s--%s)%d次涨停过滤出%d只标的,构建耗时:%.1f 秒' % (check_duration,back_date,check_date,up_num,len(poollist),end_time-start_time))        
+    #log.info(poollist)
+
+    return poollist
+    
+
+"""
+---------------------------------函数定义-次要过滤-----------------------------------------------
+"""
+
+"""
+---------------------------------函数定义-辅助函数-----------------------------------------------
+"""
+##买入函数
+def buy_stock(context,stockcode,cash):
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+    
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(1.1*last_price)) != None: #科创板需要设定限值
+            log.info('%s买入%s' % (today_date,stockcode))
+    else:
+        if order_target_value(stockcode, cash) != None:
+            log.info('%s买入%s' % (today_date,stockcode))
+            
+##卖出函数
+def sell_stock(context,stockcode,cash):
+    today_date = context.current_dt.date()
+    current_data = get_current_data()
+    
+    if stockcode[0:3] == '688':
+        last_price = current_data[stockcode].last_price
+        if order_target_value(stockcode,cash,MarketOrderStyle(0.9*last_price)) != None: #科创板需要设定限值
+            log.info('%s卖出%s' % (today_date,stockcode))
+    else:
+        if order_target_value(stockcode,cash) != None:
+            log.info('%s卖出%s' % (today_date,stockcode))
