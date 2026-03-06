@@ -50,6 +50,11 @@ BACKTEST_METRIC_LABELS = [
 BACKTEST_DURATION_COLUMN = "回测耗时"
 # 点击回测后，等待「回测完成」或「回测失败」的最长时间（秒），超时则停止回测并进入下一策略
 BACKTEST_WAIT_SECONDS = 10000 * 60
+# 策略编辑页出现以下任一文案时视为「免费回测时间不足」提示，脚本将直接终止进程
+INSUFFICIENT_BACKTEST_TIME_MARKERS = [
+    "免费回测时间不足",
+    "继续运行可能会消耗积分",
+]
 DEFAULT_RESULTS_DIR = Path(__file__).resolve().parent
 # RESULTS_CSV_PREFIX = "joinquant_backtest_results"
 RESULTS_CSV_PREFIX = "2024_2_origin"
@@ -98,6 +103,16 @@ def _results_csv_path(results_output: Path, start_date: str, end_date: str) -> P
     return output_dir / f"{RESULTS_CSV_PREFIX}_{start_date}_{end_date}.csv"
 
 
+def _skipped_csv_path(results_output: Path, start_date: str, end_date: str) -> Path:
+    """与起止日期绑定的「未入结果表」记录 CSV（已取消/失败/超时/异常），用于去重避免反复重跑。"""
+    results_output = Path(results_output)
+    if str(results_output).lower().endswith(".csv"):
+        output_dir = results_output.parent
+    else:
+        output_dir = results_output
+    return output_dir / f"{RESULTS_CSV_PREFIX}_skipped_{start_date}_{end_date}.csv"
+
+
 def _load_done_keys(csv_path: Path) -> set[tuple[str, str, str, str]]:
     """从已有结果 CSV 读取 (策略名称, 回测开始, 回测结束, 本金) 集合，用于去重。日期统一规范为 YYYY-MM-DD 以便与命令行参数对齐。"""
     csv_path = Path(csv_path)
@@ -115,6 +130,57 @@ def _load_done_keys(csv_path: Path) -> set[tuple[str, str, str, str]]:
                 cap = row[3].strip()
                 keys.add((name, start, end, cap))
     return keys
+
+
+def _load_skipped_keys(csv_path: Path) -> set[tuple[str, str, str, str]]:
+    """从「未入结果表」CSV 读取 (策略名称, 回测开始, 回测结束, 本金) 集合，与主表一起参与去重。"""
+    csv_path = Path(csv_path)
+    if not csv_path.exists():
+        return set()
+    keys = set()
+    with open(csv_path, "r", newline="", encoding="utf-8-sig") as f:
+        reader = csv.reader(f)
+        next(reader, None)
+        for row in reader:
+            if len(row) >= 4:
+                name = row[0].strip()
+                start = _normalize_date_for_key(row[1])
+                end = _normalize_date_for_key(row[2])
+                cap = row[3].strip()
+                keys.add((name, start, end, cap))
+    return keys
+
+
+def _append_skipped_row(
+    csv_path: Path,
+    strategy_name: str,
+    start_date: str,
+    end_date: str,
+    capital: str,
+    reason: str,
+) -> None:
+    """将未入结果表的一笔（已取消/失败/超时/异常）追加到 skipped CSV，无则写表头。写入失败仅打日志不抛异常。"""
+    try:
+        csv_path = Path(csv_path)
+        header = ["策略名称", "回测开始", "回测结束", "本金", "原因"]
+        row = [str(strategy_name), start_date, end_date, str(capital), str(reason)]
+        file_exists = csv_path.exists()
+        with open(csv_path, "a", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            if not file_exists:
+                w.writerow(header)
+            w.writerow(row)
+    except OSError as e:
+        print(f"      写入未入表记录文件失败，跳过: {e}")
+
+
+def _page_has_insufficient_time_dialog(page) -> bool:
+    """检测当前页是否出现「免费回测时间不足，继续运行可能会消耗积分」类提示，出现则返回 True。"""
+    try:
+        body = page.evaluate("() => document.body.innerText || ''")
+        return any(m in body for m in INSUFFICIENT_BACKTEST_TIME_MARKERS)
+    except Exception:
+        return False
 
 
 def run(
@@ -146,6 +212,7 @@ def run(
 
     # 回测表格与起止时间强绑定：只读写该起止时间对应的 CSV
     results_csv = _results_csv_path(results_csv, start_date, end_date)
+    skipped_csv = _skipped_csv_path(results_csv.parent, start_date, end_date)
     results_csv.parent.mkdir(parents=True, exist_ok=True)
     print(f"本轮回测结果表: {results_csv.name}")
 
@@ -153,20 +220,24 @@ def run(
         if not f.exists():
             raise FileNotFoundError(f"策略文件不存在: {f}")
 
-    # 跳过已运行：仅在本起止时间对应的表格内去重（日期规范为 YYYY-MM-DD 与 CSV 中 2023/9/1 等格式对齐）
+    # 双文件去重：成功记录在主表，已取消/失败/超时/异常记录在 skipped 表，两者都参与排除
     done_keys = _load_done_keys(results_csv)
+    skipped_keys = _load_skipped_keys(skipped_csv)
     if done_keys:
-        print(f"已从 {results_csv.name} 加载 {len(done_keys)} 条已跑记录，用于去重。")
+        print(f"已从 {results_csv.name} 加载 {len(done_keys)} 条成功记录，用于去重。")
+    if skipped_keys:
+        print(f"已从 {skipped_csv.name} 加载 {len(skipped_keys)} 条未入表记录（已取消/失败/超时/异常），用于去重。")
     start_norm = _normalize_date_for_key(start_date)
     end_norm = _normalize_date_for_key(end_date)
     cap_str = str(capital).strip()
     to_run = [
         f for f in strategy_files
         if (_strategy_display_name(f), start_norm, end_norm, cap_str) not in done_keys
+        and (_strategy_display_name(f), start_norm, end_norm, cap_str) not in skipped_keys
     ]
     skipped = len(strategy_files) - len(to_run)
     if skipped:
-        print(f"已跳过 {skipped} 个在相同参数下已跑过的策略。")
+        print(f"已跳过 {skipped} 个在相同参数下已跑过或已记录为未入表的策略。")
     if not to_run:
         print("当前参数（起始/结束日期、本金）下所有策略均已跑过，无需重复运行。")
         return
@@ -277,6 +348,7 @@ def run(
                                 editor_window.close()
                                 editor_ctx.close()
                                 print("      本页未在限定时间内加载出编辑器，跳过该策略。")
+                                _append_skipped_row(skipped_csv, _strategy_display_name(strategy_file), start_date, end_date, capital, "未进入回测")
                                 if idx < total:
                                     page.goto(list_url)
                                     page.get_by_text("新建策略").first.wait_for(state="visible", timeout=15000)
@@ -378,16 +450,34 @@ def run(
                     editor_page.wait_for_timeout(1200)
                     editor_page.locator("#daily-new-backtest-button").click()
 
+                    # 轮询：若出现「免费回测时间不足」则直接终止进程；否则等待回测完成/失败/已取消
+                    timeout_ms = int(BACKTEST_WAIT_SECONDS * 1000)
+                    poll_interval_ms = 3000
+                    elapsed_ms = 0
+                    backtest_ended = False
                     try:
-                        editor_page.get_by_text("回测完成").or_(editor_page.get_by_text("回测失败")).or_(editor_page.get_by_text("已取消")).first.wait_for(
-                            state="visible", timeout=int(BACKTEST_WAIT_SECONDS * 1000)
-                        )
+                        while elapsed_ms < timeout_ms:
+                            if _page_has_insufficient_time_dialog(editor_page):
+                                print("\n检测到提示：您的免费回测时间不足，继续运行可能会消耗积分。脚本已终止进程。", flush=True)
+                                os._exit(1)
+                            try:
+                                editor_page.get_by_text("回测完成").or_(editor_page.get_by_text("回测失败")).or_(editor_page.get_by_text("已取消")).first.wait_for(
+                                    state="visible", timeout=poll_interval_ms
+                                )
+                                backtest_ended = True
+                                break
+                            except PlaywrightTimeout:
+                                elapsed_ms += poll_interval_ms
+                                continue
+                        if not backtest_ended:
+                            raise PlaywrightTimeout("回测等待超时")
                     except PlaywrightTimeout:
                         print("      在设定时间内未检测到「回测完成」/「回测失败」/「已取消」，可能是平台排队或算力不足，先尝试停止回测再关闭。")
                         backtest_duration = ""
                         is_done = False
                         metrics = None
                         _try_stop_backtest(editor_page)
+                        _append_skipped_row(skipped_csv, strategy_name, start_date, end_date, capital, "回测超时")
                     else:
                         # 任一状态出现后等待 10 秒，再按 10 秒后页面的最终展示判断
                         print("      已出现回测完成/失败/已取消之一，等待 10 秒后按最终状态判断…")
@@ -424,13 +514,19 @@ def run(
                         elif status == "cancelled":
                             print(f"      回测已取消，耗时: {backtest_duration or '(未解析)'}，不追加到结果表。")
                             metrics = None
-                        else:
+                            _append_skipped_row(skipped_csv, strategy_name, start_date, end_date, capital, "已取消")
+                        elif status == "fail":
                             print("      回测失败。")
                             if fail_reason:
                                 for line in (fail_reason[:800] + ("..." if len(fail_reason) > 800 else "")).split("\n")[:12]:
                                     if line.strip():
                                         print(f"        {line.strip()}")
                             metrics = None
+                            _append_skipped_row(skipped_csv, strategy_name, start_date, end_date, capital, "回测失败")
+                        else:
+                            print(f"      回测状态未知 ({status!r})，记入未入表并跳过。")
+                            metrics = None
+                            _append_skipped_row(skipped_csv, strategy_name, start_date, end_date, capital, "未知状态")
                         editor_page.wait_for_timeout(2000)
     
                     if is_done:
@@ -459,6 +555,7 @@ def run(
                         pass
                     else:
                         print("      未解析到指标。")
+                        _append_skipped_row(skipped_csv, strategy_name, start_date, end_date, capital, "未解析到指标")
 
                     if not editor_is_main_page:
                         editor_page.close()
@@ -474,6 +571,7 @@ def run(
                     print(f"      本策略异常，跳过: {e}")
                     traceback.print_exc()
                     print("      继续下一个策略。")
+                    _append_skipped_row(skipped_csv, _strategy_display_name(strategy_file), start_date, end_date, capital, "异常")
                     if editor_page is not None and not editor_is_main_page:
                         try:
                             editor_page.close()
@@ -703,7 +801,7 @@ def main():
     parser.add_argument(
         "--max-runtime",
         type=int,
-        default=18000,
+        default=3600*3,
         metavar="SEC",
         help="最大运行时长（秒），超时后强制退出进程；不指定则不限制。例: 3600 表示 1 小时",
     )
