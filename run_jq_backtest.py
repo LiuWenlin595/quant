@@ -801,7 +801,7 @@ def main():
     parser.add_argument(
         "--max-runtime",
         type=int,
-        default=3600*3,
+        default=3600*6,
         metavar="SEC",
         help="最大运行时长（秒），超时后强制退出进程；不指定则不限制。例: 3600 表示 1 小时",
     )
